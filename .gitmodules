@@ -1,0 +1,3 @@
+[submodule "VulkanLibrary"]
+	path = VulkanLibrary
+	url = https://github.com/JacobHensley/VulkanLibrary
