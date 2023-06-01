@@ -31,6 +31,13 @@ project "PathTracer"
 		"%{prj.name}/src/**.cpp",
 		"%{prj.name}/src/**.h",
 	}
+
+	-- Exclude example layer files
+	removefiles 
+	{ 
+		"%{prj.name}/src/AppLayer.cpp",
+		"%{prj.name}/src/AppLayer.h",
+	}
 	
 	links
 	{

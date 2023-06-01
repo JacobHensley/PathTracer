@@ -1,5 +1,5 @@
 #include "Core/Application.h"
-#include "AppLayer.h"
+#include "RayTracingLayer.h"
 
 using namespace VkLibrary;
 
@@ -7,7 +7,7 @@ int main()
 {
 	Application app = Application("VulkanLibrary Template");
 
-	Ref<AppLayer> layer = CreateRef<AppLayer>("AppLayer");
+	Ref<RayTracingLayer> layer = CreateRef<RayTracingLayer>("RayTracingLayer");
 	app.AddLayer(layer);
 
 	app.Run();
