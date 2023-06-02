@@ -1,6 +1,7 @@
 #Shader RayGen
 #version 460
 #extension GL_EXT_ray_tracing : require
+#include "assets/shaders/RayTracing/Globals.h"
 
 layout(binding = 0) uniform accelerationStructureEXT u_TopLevelAS;
 
@@ -16,8 +17,7 @@ layout(binding = 3) uniform CameraBuffer
 	mat4 InverseProjection;
 } u_CameraBuffer;
 
-
-layout(binding = 7) uniform Scene
+layout(binding = 7) uniform SceneBuffer
 {
 	vec3 DirectionalLight_Direction;
 	vec3 PointLight_Position;
@@ -29,19 +29,6 @@ struct RayDesc
 	vec3 Origin;
 	vec3 Direction;
 	float TMin, TMax;
-};
-
-struct Payload
-{
-	float Distance;
-	vec3 Albedo;
-	float Roughness;
-	float Metallic;
-	vec3 WorldPosition;
-	vec3 WorldNormal;
-	mat3 WorldNormalMatrix;
-	vec3 Tangent;
-	vec3 View;
 };
 
 layout(location = 0) rayPayloadEXT Payload g_RayPayload;
