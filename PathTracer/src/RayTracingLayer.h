@@ -53,6 +53,8 @@ class RayTracingLayer : public Layer
 	private:
 		Ref<Mesh> m_Mesh;
 
+		bool m_NeedsResize = false;
+
 		Ref<Camera> m_Camera;
 		CameraBuffer m_CameraBuffer;
 		Ref<UniformBuffer> m_CameraUniformBuffer;
@@ -80,6 +82,6 @@ class RayTracingLayer : public Layer
 
 		VkDescriptorSet m_ViewportImageDescriptorSet = VK_NULL_HANDLE;
 		VkImageView m_ViewportImageView = VK_NULL_HANDLE;
-		uint32_t m_ViewportWidth = 0;
-		uint32_t m_ViewportHeight = 0;
+		uint32_t m_ViewportWidth = 1;
+		uint32_t m_ViewportHeight = 1;
 };

@@ -16,11 +16,11 @@ layout(binding = 9) uniform sampler2D u_Textures[];
 
 struct Vertex
 {
-	vec3 Position;
-	vec2 TextureCoords;
-	vec3 Normal;
-	vec4 Tangent;
-	vec3 Binormal;
+	vec3 Position;      // 12
+	vec2 TextureCoords; // 20
+	vec3 Normal;        // 32
+	vec4 Tangent;       // 48
+	vec3 Binormal;      // 60
 };
 
 struct Material
@@ -149,7 +149,8 @@ void main()
 	g_RayPayload.Metallic			= material.MetallicValue;
 	g_RayPayload.WorldPosition		= worldPosition;
 	g_RayPayload.WorldNormal		= worldNormal;
-	g_RayPayload.WorldNormalMatrix	= mat3(vertex.Tangent.xyz, vertex.Binormal, vertex.Normal);
+	g_RayPayload.WorldNormalMatrix	= mat3(gl_ObjectToWorldEXT) * mat3(vertex.Tangent.xyz, vertex.Binormal, vertex.Normal);
+	g_RayPayload.WorldNormalMatrix  = mat3(normalize(g_RayPayload.WorldNormalMatrix[0]), normalize(g_RayPayload.WorldNormalMatrix[1]), normalize(g_RayPayload.WorldNormalMatrix[2]));
 	g_RayPayload.Tangent			= vertex.Tangent.xyz;
 	g_RayPayload.View				= view;
 }

@@ -286,27 +286,26 @@ vec3 TracePath(RayDesc ray, uint seed)
 
 	float directThroughput = 1.0;
 
+	const int MAX_ITERATIONS = 50 + 1;
+	int iterationCount = 0;
+
 	for (int bounceIndex = 0; bounceIndex < MAX_BOUNCES; bounceIndex++)
 	{
+		// Safety
+		iterationCount++;
+		if (iterationCount >= MAX_ITERATIONS)
+		{
+			color = vec3(1, 0, 0);	
+			break;
+		}
+
 		traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, ray.Origin, ray.TMin, ray.Direction, ray.TMax, 0);
 
 		Payload payload = g_RayPayload;
-
-		bool backFace = dot(normalize(ray.Direction), payload.WorldNormal) > 0.0;
-		if (backFace)
-		{
-			if (!twoSided)
-			{
-				ray.Origin = payload.WorldPosition;
-				ray.Origin += ray.Direction * 0.0001;
-				bounceIndex--;
-				continue;
-			}
-
-			if (twoSided)
-				payload.WorldNormal = -payload.WorldNormal;
-		}
-
+		color = payload.WorldNormalMatrix[0] * 0.5 + 0.5;
+		//color = payload.WorldNormal;
+		break;
+		
 		// Miss
 		if (payload.Distance == -1.0)
 		{
@@ -314,6 +313,21 @@ vec3 TracePath(RayDesc ray, uint seed)
 			ambientLight *= 1.0;
 			color += ambientLight * ambientContribution;
 			break;
+		}
+
+		bool backFace = dot(normalize(ray.Direction), payload.WorldNormal) > 0.0;
+		if (backFace)
+		{
+			if (!twoSided)
+			{
+				ray.Origin = payload.WorldPosition;
+				ray.Origin += ray.Direction * 0.001;
+				bounceIndex--;
+				continue;
+			}
+
+			if (twoSided)
+				payload.WorldNormal = -payload.WorldNormal;
 		}
 
 		seed++;

@@ -3,15 +3,17 @@
 #include "ImGui/imgui.h"
 #include "ImGui/imgui_impl_vulkan.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+
 RayTracingLayer::RayTracingLayer(const std::string& name)
 	: Layer("RayTracingLayer")
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
-	m_Mesh = CreateRef<Mesh>("assets/models/Suzanne/glTF/Suzanne.gltf");
-//	m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
+	//m_Mesh = CreateRef<Mesh>("assets/models/Suzanne/glTF/Suzanne.gltf");
+	m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
 
-	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(2);
+	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
 	CameraSpecification cameraSpec;
 	m_Camera = CreateRef<Camera>(cameraSpec);
@@ -48,25 +50,27 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 	{
 		AccelerationStructureSpecification spec;
 		spec.Mesh = m_Mesh;
-		spec.Transform = glm::mat4(1.0f);
+		spec.Transform = glm::mat4(1.0f) * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
 		m_AccelerationStructure = CreateRef<AccelerationStructure>(spec);
 	}
 
 	{
 		ImageSpecification spec;
+		spec.DebugName = "RT-FinalImage";
 		spec.Format = ImageFormat::RGBA8;
 		spec.Usage = ImageUsage::STORAGE_IMAGE_2D;
-		spec.Width = 1280;
-		spec.Height = 720;
+		spec.Width = 1;
+		spec.Height = 1;
 		m_Image = CreateRef<Image>(spec);
 	}
 
 	{
 		ImageSpecification spec;
+		spec.DebugName = "RT-AccumulationImage";
 		spec.Format = ImageFormat::RGBA32F;
 		spec.Usage = ImageUsage::STORAGE_IMAGE_2D;
-		spec.Width = 1280;
-		spec.Height = 720;
+		spec.Width = 1;
+		spec.Height = 1;
 		m_AccumulationImage = CreateRef<Image>(spec);
 	}
 
@@ -94,9 +98,6 @@ void RayTracingLayer::OnDetach()
 void RayTracingLayer::RayTracingPass()
 {
 	Ref<VulkanDevice> device = Application::GetVulkanDevice();
-
-	if (m_ViewportWidth == 0 || m_ViewportHeight == 0)
-		return;
 
 	VkCommandBuffer commandBuffer = m_RenderCommandBuffer->GetCommandBuffer();
 
@@ -204,6 +205,7 @@ void RayTracingLayer::OnUpdate()
 	if (!m_Accumulate || moved)
 		m_SceneBuffer.FrameIndex = 1;
 
+	m_SceneBuffer.FrameIndex = 1;
 	m_SceneUniformBuffer->SetData(&m_SceneBuffer);
 
 	// Dispatch PreethamSky compute shader 
@@ -225,6 +227,39 @@ void RayTracingLayer::OnUpdate()
 
 void RayTracingLayer::OnRender()
 {
+	/////////////////////////////////////////////
+	// 1. Update data
+	/////////////////////////////////////////////
+
+	// Handle resize
+	if (m_NeedsResize)
+	{
+		m_NeedsResize = false;
+		
+		m_Image->Resize(m_ViewportWidth, m_ViewportHeight);
+		m_AccumulationImage->Resize(m_ViewportWidth, m_ViewportHeight);
+
+		m_SceneBuffer.FrameIndex = 1;
+		m_SceneUniformBuffer->SetData(&m_SceneBuffer);
+	}
+
+	// Update camera uniform buffer
+	{
+		m_Camera->Resize(m_ViewportWidth, m_ViewportHeight);
+
+		m_CameraBuffer.ViewProjection = m_Camera->GetViewProjection();
+		m_CameraBuffer.InverseViewProjection = m_Camera->GetInverseViewProjection();
+		m_CameraBuffer.View = m_Camera->GetView();
+		m_CameraBuffer.InverseView = m_Camera->GetInverseView();
+		m_CameraBuffer.InverseProjection = m_Camera->GetInverseProjection();
+
+		m_CameraUniformBuffer->SetData(&m_CameraBuffer);
+	}
+
+	/////////////////////////////////////////////
+	// 2. Record command buffers
+	/////////////////////////////////////////////
+
 	m_RenderCommandBuffer->Begin();
 
 	RayTracingPass();
@@ -244,30 +279,12 @@ void RayTracingLayer::OnImGUIRender()
 	ImGui::Begin("RTX On", &open, flags);
 
 	ImVec2 size = ImGui::GetContentRegionAvail();
-	m_ViewportWidth = size.x;
-	m_ViewportHeight = size.y;
 
-	// Handle resize
-	bool resized = m_Camera->Resize(m_ViewportWidth, m_ViewportHeight);
-	if (resized)
+	if (m_ViewportWidth != size.x || m_ViewportHeight != size.y)
 	{
-		m_Image->Resize(m_ViewportWidth, m_ViewportHeight);
-		m_AccumulationImage->Resize(m_ViewportWidth, m_ViewportHeight);
-
-		m_SceneBuffer.FrameIndex = 1;
-		m_SceneUniformBuffer->SetData(&m_SceneBuffer);
-		
-	}	
-
-	// Update camera uniform buffer
-	{
-		m_CameraBuffer.ViewProjection = m_Camera->GetViewProjection();
-		m_CameraBuffer.InverseViewProjection = m_Camera->GetInverseViewProjection();
-		m_CameraBuffer.View = m_Camera->GetView();
-		m_CameraBuffer.InverseView = m_Camera->GetInverseView();
-		m_CameraBuffer.InverseProjection = m_Camera->GetInverseProjection();
-
-		m_CameraUniformBuffer->SetData(&m_CameraBuffer);
+		m_NeedsResize = true;
+		m_ViewportWidth = size.x;
+		m_ViewportHeight = size.y;
 	}
 
 	// Update viewport descriptor on reisze
