@@ -7,6 +7,5 @@ struct Payload
 	vec3 WorldPosition;
 	vec3 WorldNormal;
 	mat3 WorldNormalMatrix;
-	vec3 Tangent;
 	vec3 View;
 };

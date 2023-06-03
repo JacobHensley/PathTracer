@@ -30,9 +30,9 @@ struct Material
 	float RoughnessValue;
 	uint UseNormalMap;
 
-	uint AlbedoMapIndex;
-	uint MetallicRoughnessMapIndex;
-	uint NormalMapIndex;
+	int AlbedoMapIndex;
+	int MetallicRoughnessMapIndex;
+	int NormalMapIndex;
 };
 
 Vertex UnpackVertex(uint vertexBufferIndex, uint index, uint vertexOffset)
@@ -62,13 +62,13 @@ Vertex UnpackVertex(uint vertexBufferIndex, uint index, uint vertexOffset)
 	);
 
 	vertex.Tangent = vec4(
-		m_VertexBuffers[vertexBufferIndex].Data[offset * index +  8],
-		m_VertexBuffers[vertexBufferIndex].Data[offset * index +  9],
+		m_VertexBuffers[vertexBufferIndex].Data[offset * index + 8],
+		m_VertexBuffers[vertexBufferIndex].Data[offset * index + 9],
 		m_VertexBuffers[vertexBufferIndex].Data[offset * index + 10],
 		m_VertexBuffers[vertexBufferIndex].Data[offset * index + 11]
 	);
 
-	vertex.Binormal = cross(normalize(vertex.Normal), normalize(vertex.Tangent.xyz)) * vertex.Tangent.w;
+	vertex.Binormal = cross(normalize(vertex.Tangent.xyz), normalize(vertex.Normal)) * vertex.Tangent.w;
 
 	return vertex;
 }
@@ -100,7 +100,8 @@ Vertex InterpolateVertex(Vertex vertices[3], vec3 barycentrics)
 
 Material UnpackMaterial(uint materialIndex)
 {
-	uint offset = materialIndex * 9;
+	const uint stride = 36;
+	const uint offset = materialIndex * (stride / 4);
 
 	Material material;
 
@@ -109,15 +110,16 @@ Material UnpackMaterial(uint materialIndex)
 	material.RoughnessValue = m_Materials.Data[offset + 4];
 	material.UseNormalMap = floatBitsToUint(m_Materials.Data[offset + 5]);
 
-	material.AlbedoMapIndex = floatBitsToUint(m_Materials.Data[offset + 6]);
-	material.MetallicRoughnessMapIndex = floatBitsToUint(m_Materials.Data[offset + 7]);
-	material.NormalMapIndex = floatBitsToUint(m_Materials.Data[offset + 8]);
+	material.AlbedoMapIndex = floatBitsToInt(m_Materials.Data[offset + 6]);
+	material.MetallicRoughnessMapIndex = floatBitsToInt(m_Materials.Data[offset + 7]);
+	material.NormalMapIndex = floatBitsToInt(m_Materials.Data[offset + 8]);
 
 	return material;
 }
 
 void main()
 {
+	// Collect the vertex data for the triangle that was hit
 	uint bufferIndex = m_SubmeshData.Data[gl_InstanceCustomIndexEXT * 4 + 0];
 	uint vertexOffset = m_SubmeshData.Data[gl_InstanceCustomIndexEXT * 4 + 1];
 	uint indexOffset = m_SubmeshData.Data[gl_InstanceCustomIndexEXT * 4 + 2];
@@ -135,22 +137,46 @@ void main()
 		UnpackVertex(bufferIndex, index2, vertexOffset)
 	);
 
-	// Weight to each vertex
+	// Interpolate the vertex using barycentrics 
 	vec3 barycentrics = vec3(1.0 - g_HitAttributes.x - g_HitAttributes.y, g_HitAttributes.x, g_HitAttributes.y);
 	Vertex vertex = InterpolateVertex(vertices, barycentrics);
 
+	// Organize the data
 	vec3 worldPosition = gl_ObjectToWorldEXT * vec4(vertex.Position, 1.0);
 	vec3 worldNormal = normalize(mat3(gl_ObjectToWorldEXT) * vertex.Normal);
+	mat3 worldNormalMatrix = mat3(gl_ObjectToWorldEXT) * mat3(vertex.Tangent.xyz, vertex.Binormal, vertex.Normal);
+	worldNormalMatrix =  mat3(normalize(worldNormalMatrix[0]), normalize(worldNormalMatrix[1]), normalize(worldNormalMatrix[2]));
 	vec3 view = normalize(-gl_WorldRayDirectionEXT);
 
+	// Load the textures if they exist
+	vec3 AlbedoTextureValue = vec3(1.0);
+	if (material.AlbedoMapIndex != -1)
+		AlbedoTextureValue = texture(u_Textures[material.AlbedoMapIndex], vertex.TextureCoords).rgb;
+
+	vec2 MetallicRoughnessMapTextureValue = vec2(1.0);
+	if (material.MetallicRoughnessMapIndex != -1)
+		MetallicRoughnessMapTextureValue = texture(u_Textures[material.MetallicRoughnessMapIndex], vertex.TextureCoords).bg;
+
+	vec3 NormalMapTextureValue = vec3(1.0);
+	if (material.NormalMapIndex != -1)
+		NormalMapTextureValue = texture(u_Textures[material.NormalMapIndex], vertex.TextureCoords).rgb;
+
+	// If using a normal map apply it 
+	if (material.UseNormalMap == 1.0 && material.NormalMapIndex != -1)
+	{
+		vec3 normal = normalize(texture(u_Textures[material.NormalMapIndex], vertex.TextureCoords).rgb * 2.0 - 1.0);
+		normal = normalize(worldNormalMatrix * normal);
+
+		worldNormal = normal;
+	}
+
+	// Fill the payload
 	g_RayPayload.Distance			= gl_RayTmaxEXT;
-	g_RayPayload.Albedo				= material.AlbedoValue;
-	g_RayPayload.Roughness			= material.RoughnessValue;
-	g_RayPayload.Metallic			= material.MetallicValue;
+	g_RayPayload.Albedo				= material.AlbedoValue * AlbedoTextureValue;
+	g_RayPayload.Roughness			= material.RoughnessValue * MetallicRoughnessMapTextureValue.y;
+	g_RayPayload.Metallic			= material.MetallicValue * MetallicRoughnessMapTextureValue.x;
 	g_RayPayload.WorldPosition		= worldPosition;
 	g_RayPayload.WorldNormal		= worldNormal;
-	g_RayPayload.WorldNormalMatrix	= mat3(gl_ObjectToWorldEXT) * mat3(vertex.Tangent.xyz, vertex.Binormal, vertex.Normal);
-	g_RayPayload.WorldNormalMatrix  = mat3(normalize(g_RayPayload.WorldNormalMatrix[0]), normalize(g_RayPayload.WorldNormalMatrix[1]), normalize(g_RayPayload.WorldNormalMatrix[2]));
-	g_RayPayload.Tangent			= vertex.Tangent.xyz;
+	g_RayPayload.WorldNormalMatrix	= worldNormalMatrix;
 	g_RayPayload.View				= view;
 }

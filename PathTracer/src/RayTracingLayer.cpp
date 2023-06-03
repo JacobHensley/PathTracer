@@ -10,6 +10,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
+	//m_Mesh = CreateRef<Mesh>("assets/models/RedSuzanne.gltf");
 	//m_Mesh = CreateRef<Mesh>("assets/models/Suzanne/glTF/Suzanne.gltf");
 	m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
 
@@ -152,8 +153,10 @@ void RayTracingLayer::RayTracingPass()
 		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6, &submeshDataStorageBuffer->GetDescriptorBufferInfo()),
 		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 7, &m_SceneUniformBuffer->GetDescriptorBufferInfo()),
 		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8, &m_AccelerationStructure->GetMaterialBuffer()->GetDescriptorBufferInfo()),
-		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, textureImageInfos.data(), (uint32_t)textureImageInfos.size()),
 	};
+
+	if (textureImageInfos.size() > 0)
+		rayTracingWriteDescriptors.push_back(VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, textureImageInfos.data(), (uint32_t)textureImageInfos.size()));
 
 	vkUpdateDescriptorSets(device->GetLogicalDevice(), rayTracingWriteDescriptors.size(), rayTracingWriteDescriptors.data(), 0, NULL);
 
@@ -205,7 +208,6 @@ void RayTracingLayer::OnUpdate()
 	if (!m_Accumulate || moved)
 		m_SceneBuffer.FrameIndex = 1;
 
-	m_SceneBuffer.FrameIndex = 1;
 	m_SceneUniformBuffer->SetData(&m_SceneBuffer);
 
 	// Dispatch PreethamSky compute shader 
