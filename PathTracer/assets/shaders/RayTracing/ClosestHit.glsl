@@ -162,7 +162,7 @@ void main()
 		NormalMapTextureValue = texture(u_Textures[material.NormalMapIndex], vertex.TextureCoords).rgb;
 
 	// If using a normal map apply it 
-	if (material.UseNormalMap == 1.0 && material.NormalMapIndex != -1)
+	if (material.UseNormalMap == 1.0 && material.NormalMapIndex != -1 && false)
 	{
 		vec3 normal = normalize(texture(u_Textures[material.NormalMapIndex], vertex.TextureCoords).rgb * 2.0 - 1.0);
 		normal = normalize(worldNormalMatrix * normal);

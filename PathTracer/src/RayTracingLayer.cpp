@@ -2,17 +2,17 @@
 #include "Core/Application.h"
 #include "ImGui/imgui.h"
 #include "ImGui/imgui_impl_vulkan.h"
-
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 RayTracingLayer::RayTracingLayer(const std::string& name)
 	: Layer("RayTracingLayer")
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
-	//m_Mesh = CreateRef<Mesh>("assets/models/RedSuzanne.gltf");
+	m_Mesh = CreateRef<Mesh>("assets/models/CornellBox.gltf");
 	//m_Mesh = CreateRef<Mesh>("assets/models/Suzanne/glTF/Suzanne.gltf");
-	m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
+	//m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
 
 	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
@@ -51,7 +51,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 	{
 		AccelerationStructureSpecification spec;
 		spec.Mesh = m_Mesh;
-		spec.Transform = glm::mat4(1.0f) * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
+		spec.Transform = glm::mat4(1.0f) * glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
 		m_AccelerationStructure = CreateRef<AccelerationStructure>(spec);
 	}
 
@@ -77,8 +77,10 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 
 	CreateRayTracingPipeline();
 
-	m_SceneBuffer.DirectionalLight_Direction = glm::normalize(glm::vec3(-0.66f, -0.577f, -0.577f));
-	m_SceneBuffer.PointLight_Position = glm::vec3(-5);
+	m_SceneBuffer.PointLight.Position = glm::vec3(0.0);
+	m_SceneBuffer.PointLight.Color = glm::vec3(1.0);
+	m_SceneBuffer.PointLight.Intensity = 1.0;
+	m_SceneBuffer.PointLight.Active = 1.0;
 	m_SceneBuffer.FrameIndex = 1;
 	m_SceneUniformBuffer = CreateRef<UniformBuffer>(&m_SceneBuffer, sizeof(SceneBuffer));
 }
@@ -153,6 +155,7 @@ void RayTracingLayer::RayTracingPass()
 		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6, &submeshDataStorageBuffer->GetDescriptorBufferInfo()),
 		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 7, &m_SceneUniformBuffer->GetDescriptorBufferInfo()),
 		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8, &m_AccelerationStructure->GetMaterialBuffer()->GetDescriptorBufferInfo()),
+		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10, &m_Skybox->GetDescriptorImageInfo()),
 	};
 
 	if (textureImageInfos.size() > 0)
@@ -205,7 +208,7 @@ void RayTracingLayer::OnUpdate()
 
 	bool moved = m_Camera->Update();
 
-	if (!m_Accumulate || moved)
+	if (!m_Accumulate || moved || m_UpdateSkyBox)
 		m_SceneBuffer.FrameIndex = 1;
 
 	m_SceneUniformBuffer->SetData(&m_SceneBuffer);
@@ -322,6 +325,15 @@ void RayTracingLayer::OnImGUIRender()
 	if (ImGui::DragFloat("Azimuth",     &m_SkyboxSettings.y, 0.01f, 0, 2 * 3.14))
 		m_UpdateSkyBox = true;
 	if (ImGui::DragFloat("Inclination", &m_SkyboxSettings.z, 0.01f, 0, 2 * 3.14))
+		m_UpdateSkyBox = true;
+
+	ImGui::Separator();
+
+	if (ImGui::DragFloat3("Point Light Position", glm::value_ptr(m_SceneBuffer.PointLight.Position), 0.01f, -5.0, 5.0))
+		m_UpdateSkyBox = true;
+	if (ImGui::DragFloat3("Point Light Color", glm::value_ptr(m_SceneBuffer.PointLight.Color), 0.01f, 0.0, 1.0))
+		m_UpdateSkyBox = true;
+	if (ImGui::DragFloat("Point Light Intensity", &m_SceneBuffer.PointLight.Intensity, 0.01f, 0, 5.0))
 		m_UpdateSkyBox = true;
 
 	ImGui::End();
