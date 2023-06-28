@@ -12,15 +12,6 @@
 
 using namespace VkLibrary;
 
-struct PointLight
-{
-	glm::vec3 Position;
-	float padding0;
-	glm::vec3 Color;
-	float Intensity;
-	uint32_t Active;
-};
-
 struct CameraBuffer
 {
 	glm::mat4 ViewProjection;
@@ -32,7 +23,6 @@ struct CameraBuffer
 
 struct SceneBuffer
 {
-	PointLight PointLight;
 	uint32_t FrameIndex;
 };
 

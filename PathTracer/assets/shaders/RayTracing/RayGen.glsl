@@ -17,14 +17,6 @@ struct Ray
 	float TMax;
 };
 
-struct PointLight
-{
-	vec3 Position;
-	vec3 Color;
-	float Intensity;
-	uint Active;
-};
-
 layout(binding = 3) uniform CameraBuffer
 {
 	mat4 ViewProjection;
@@ -36,11 +28,10 @@ layout(binding = 3) uniform CameraBuffer
 
 layout(binding = 7) uniform SceneBuffer
 {
-	PointLight PointLight;
 	uint FrameIndex;
 } u_SceneData;
 
-const float PI = 3.1415;
+const float PI = 3.14159;
 
 layout(location = 0) rayPayloadEXT Payload g_RayPayload;
 
@@ -83,136 +74,40 @@ vec2 RandomPointInCircle(inout uint seed)
 
 // ----------------------------------------------------------------------------
 
-float DistributionGGX(vec3 N, vec3 H, float roughness)
-{
-    float a = roughness*roughness;
-    float a2 = a*a;
-    float NdotH = max(dot(N, H), 0.0);
-    float NdotH2 = NdotH*NdotH;
+// NOTE: Image gets far too bright with too many bounces
+// NOTE: Image is far more grainy with small high intensity emissive light vs skybox
 
-    float nom   = a2;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom = PI * denom * denom;
-
-    return nom / denom;
-}
-
-float GeometrySchlickGGX(float NdotV, float roughness)
-{
-    float r = (roughness + 1.0);
-    float k = (r*r) / 8.0;
-
-    float nom   = NdotV;
-    float denom = NdotV * (1.0 - k) + k;
-
-    return nom / denom;
-}
-
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
-{
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
-    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
-    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
-
-    return ggx1 * ggx2;
-}
-
-vec3 fresnelSchlick(float cosTheta, vec3 F0)
-{
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
-
-vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
-{
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
-
-// ----------------------------------------------------------------------------
-
-vec3 TracePath(Ray ray, uint seed)
+vec3 TracePath(Ray ray, inout uint seed)
 {
 	uint flags = gl_RayFlagsOpaqueEXT;
 	uint mask = 0xff;
 
-	vec3 throughput = vec3(1.0);
-	vec3 color = vec3(0.0);
+	vec3 throughput = vec3(1.0); // the amount of energy reflected vs. absorbed
+	vec3 light = vec3(0.0);
 
-	const int MAX_BOUNCES = 2;
-	float bounceCount = 0.0;
-
+	const int MAX_BOUNCES = 5;
+	 
 	for (int bounceIndex = 0; bounceIndex < MAX_BOUNCES; bounceIndex++)
 	{
-		bounceCount++;
-
 		traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, ray.Origin, ray.TMin, ray.Direction, ray.TMax, 0);
 		Payload payload = g_RayPayload;
 
-		vec3 Lo = vec3(0.0);
-		vec3 ambient = vec3(0.0);
-
-		vec3 lightPosition = u_SceneData.PointLight.Position;
-		vec3 lightColor = u_SceneData.PointLight.Color;
-
-		vec3 N = payload.WorldNormal;
-		vec3 V = normalize(u_CameraBuffer.InverseView[3].xyz - payload.WorldPosition);
-		vec3 R = reflect(-V, N);
-
-		vec3 F0 = vec3(0.04); 
-		F0 = mix(F0, payload.Albedo, payload.Metallic);
-
-		if (payload.Distance != -1)
+		if (payload.Distance == -1)
 		{
-			vec3 L = normalize(lightPosition - payload.WorldPosition);
-			vec3 H = normalize(V + L);
-			float distance = length(lightPosition - payload.WorldPosition);
-			float attenuation = 1.0 / (distance * distance);
-			vec3 radiance = lightColor * attenuation;
-
-			float NDF = DistributionGGX(N, H, payload.Roughness);   
-			float G   = GeometrySmith(N, V, L, payload.Roughness);    
-			vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);        
-        
-			vec3 numerator    = NDF * G * F;
-			float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-			vec3 specular = numerator / denominator;
-    
-			vec3 kS = F;
-			vec3 kD = vec3(1.0) - kS;
-			kD *= 1.0 - payload.Metallic;	                
-            
-			float NdotL = max(dot(N, L), 0.0);
-
-			Lo += (kD * payload.Albedo / PI + specular) * radiance * NdotL;
-		}
-		else
-		{
-			vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, payload.Roughness);
-
-			vec3 kS = F;
-			vec3 kD = 1.0 - kS;
-			kD *= 1.0 - payload.Metallic;	  
-    
-			vec3 irradiance = texture(u_Skybox, N).rgb;
-			vec3 diffuse = irradiance * payload.Albedo;
-
-			ambient = (kD * diffuse);
+			vec3 skyColor = vec3(0.53, 0.80, 0.92);
+			light += skyColor * throughput;
 
 			break;
 		}
-
-		color += ambient + Lo;
+	
+		throughput *= payload.Albedo;
+		light += payload.Emission * throughput;
 
 		ray.Direction = normalize(payload.WorldNormal + RandomDirection(seed));
-		ray.Origin = payload.WorldPosition;
-		ray.Origin += payload.WorldNormal * 0.0001 - ray.Direction * 0.0001;
+		ray.Origin = payload.WorldPosition + (payload.WorldNormal * 0.0001 - ray.Direction * 0.0001);
 	}
 
-	color = color / bounceCount;
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0/2.2)); 
-
-	return color;
+	return light;
 }
 
 void main()
@@ -222,13 +117,18 @@ void main()
 
 	vec3 color = vec3(0.0);
 
-	const uint SAMPLE_COUNT = 2;
+	const uint SAMPLE_COUNT = 5;
 	for (uint i = 0; i < SAMPLE_COUNT; i++)
 	{
 		vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
 
+		if (i > 0)
+        {
+			pixelCenter += RandomPointInCircle(seed);
+        }
+
 		vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
-		vec2 d = inUV * 2.0 - 1.0;
+ 		vec2 d = inUV * 2.0 - 1.0;
 
 		vec4 target = u_CameraBuffer.InverseProjection * vec4(d.x, d.y, 1, 1);
 		vec4 direction = u_CameraBuffer.InverseView * vec4(normalize(target.xyz / target.w), 0);
@@ -254,11 +154,11 @@ void main()
 		color += previousColor;
 		numPaths = numPreviousPaths + SAMPLE_COUNT;
 
-		imageStore(o_AccumulationImage, ivec2(gl_LaunchIDEXT.xy), vec4(color, numPaths ));
+		imageStore(o_AccumulationImage, ivec2(gl_LaunchIDEXT.xy), vec4(color, numPaths));
 	}
 	else
 	{
-		// If it is the first frame, fill the accumulation image with black.
+		// On the first frame, fill the accumulation image with black.
 		imageStore(o_AccumulationImage, ivec2(gl_LaunchIDEXT.xy), vec4(0.0));
 	}
 

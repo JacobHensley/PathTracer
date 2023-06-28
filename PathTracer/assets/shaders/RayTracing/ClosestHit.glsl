@@ -25,14 +25,16 @@ struct Vertex
 
 struct Material
 {
-	vec3 AlbedoValue;
-	float MetallicValue;
-	float RoughnessValue;
-	uint UseNormalMap;
+	vec3 AlbedoValue;				// 12
+	float MetallicValue;			// 16
+	float RoughnessValue;			// 20
+	vec3 EmissiveValue;				// 32
+	float EmissiveStrength;			// 36
+	uint UseNormalMap;				// 40
 
-	int AlbedoMapIndex;
-	int MetallicRoughnessMapIndex;
-	int NormalMapIndex;
+	int AlbedoMapIndex;				// 44
+	int MetallicRoughnessMapIndex;	// 48
+	int NormalMapIndex;				// 52
 };
 
 Vertex UnpackVertex(uint vertexBufferIndex, uint index, uint vertexOffset)
@@ -100,7 +102,7 @@ Vertex InterpolateVertex(Vertex vertices[3], vec3 barycentrics)
 
 Material UnpackMaterial(uint materialIndex)
 {
-	const uint stride = 36;
+	const uint stride = 52;
 	const uint offset = materialIndex * (stride / 4);
 
 	Material material;
@@ -108,11 +110,13 @@ Material UnpackMaterial(uint materialIndex)
 	material.AlbedoValue = vec3(m_Materials.Data[offset + 0], m_Materials.Data[offset + 1], m_Materials.Data[offset + 2]);
 	material.MetallicValue = m_Materials.Data[offset + 3];
 	material.RoughnessValue = m_Materials.Data[offset + 4];
-	material.UseNormalMap = floatBitsToUint(m_Materials.Data[offset + 5]);
+	material.EmissiveValue = vec3(m_Materials.Data[offset + 5], m_Materials.Data[offset + 6], m_Materials.Data[offset + 7]);
+	material.EmissiveStrength = m_Materials.Data[offset + 8];
+	material.UseNormalMap = floatBitsToUint(m_Materials.Data[offset + 9]);
 
-	material.AlbedoMapIndex = floatBitsToInt(m_Materials.Data[offset + 6]);
-	material.MetallicRoughnessMapIndex = floatBitsToInt(m_Materials.Data[offset + 7]);
-	material.NormalMapIndex = floatBitsToInt(m_Materials.Data[offset + 8]);
+	material.AlbedoMapIndex = floatBitsToInt(m_Materials.Data[offset + 10]);
+	material.MetallicRoughnessMapIndex = floatBitsToInt(m_Materials.Data[offset + 11]);
+	material.NormalMapIndex = floatBitsToInt(m_Materials.Data[offset + 12]);
 
 	return material;
 }
@@ -175,8 +179,25 @@ void main()
 	g_RayPayload.Albedo				= material.AlbedoValue * AlbedoTextureValue;
 	g_RayPayload.Roughness			= material.RoughnessValue * MetallicRoughnessMapTextureValue.y;
 	g_RayPayload.Metallic			= material.MetallicValue * MetallicRoughnessMapTextureValue.x;
+	g_RayPayload.Emission			= material.EmissiveValue * material.EmissiveStrength;
 	g_RayPayload.WorldPosition		= worldPosition;
 	g_RayPayload.WorldNormal		= worldNormal;
 	g_RayPayload.WorldNormalMatrix	= worldNormalMatrix;
+	g_RayPayload.Binormal			= vertex.Binormal;
+	g_RayPayload.Tangent			= vec3(vertex.Tangent);
 	g_RayPayload.View				= view;
+
+	// gl_InstanceCustomIndexEXT: Cornell Box
+	// 0:  Back wall
+	// 1:  Ceiling
+	// 2:  Floor
+	// 3:  Right wall
+	// 4:  Left wall
+	// 5:  Small box
+	// 6:  Large box
+	// 7:  Sphere
+	// 8:  Suzanne body
+	// 9:  Light
+	// 10: Suzanne eyes
+
 }

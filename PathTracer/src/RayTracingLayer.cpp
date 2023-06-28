@@ -77,10 +77,6 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 
 	CreateRayTracingPipeline();
 
-	m_SceneBuffer.PointLight.Position = glm::vec3(0.0);
-	m_SceneBuffer.PointLight.Color = glm::vec3(1.0);
-	m_SceneBuffer.PointLight.Intensity = 1.0;
-	m_SceneBuffer.PointLight.Active = 1.0;
 	m_SceneBuffer.FrameIndex = 1;
 	m_SceneUniformBuffer = CreateRef<UniformBuffer>(&m_SceneBuffer, sizeof(SceneBuffer));
 }
@@ -198,6 +194,8 @@ bool RayTracingLayer::CreateRayTracingPipeline()
 	if (!spec.ClosestHitShader->CompiledSuccessfully())
 		return false;
 
+	m_SceneBuffer.FrameIndex = 1;
+
 	m_RayTracingPipeline = CreateRef<RayTracingPipeline>(spec);
 	return true;
 }
@@ -245,8 +243,8 @@ void RayTracingLayer::OnRender()
 		m_AccumulationImage->Resize(m_ViewportWidth, m_ViewportHeight);
 
 		m_SceneBuffer.FrameIndex = 1;
-		m_SceneUniformBuffer->SetData(&m_SceneBuffer);
 	}
+	m_SceneUniformBuffer->SetData(&m_SceneBuffer);
 
 	// Update camera uniform buffer
 	{
@@ -325,15 +323,6 @@ void RayTracingLayer::OnImGUIRender()
 	if (ImGui::DragFloat("Azimuth",     &m_SkyboxSettings.y, 0.01f, 0, 2 * 3.14))
 		m_UpdateSkyBox = true;
 	if (ImGui::DragFloat("Inclination", &m_SkyboxSettings.z, 0.01f, 0, 2 * 3.14))
-		m_UpdateSkyBox = true;
-
-	ImGui::Separator();
-
-	if (ImGui::DragFloat3("Point Light Position", glm::value_ptr(m_SceneBuffer.PointLight.Position), 0.01f, -5.0, 5.0))
-		m_UpdateSkyBox = true;
-	if (ImGui::DragFloat3("Point Light Color", glm::value_ptr(m_SceneBuffer.PointLight.Color), 0.01f, 0.0, 1.0))
-		m_UpdateSkyBox = true;
-	if (ImGui::DragFloat("Point Light Intensity", &m_SceneBuffer.PointLight.Intensity, 0.01f, 0, 5.0))
 		m_UpdateSkyBox = true;
 
 	ImGui::End();
