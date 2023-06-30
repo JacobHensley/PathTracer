@@ -244,6 +244,7 @@ void RayTracingLayer::OnRender()
 
 		m_SceneBuffer.FrameIndex = 1;
 	}
+
 	m_SceneUniformBuffer->SetData(&m_SceneBuffer);
 
 	// Update camera uniform buffer

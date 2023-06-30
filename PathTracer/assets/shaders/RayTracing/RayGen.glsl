@@ -31,7 +31,7 @@ layout(binding = 7) uniform SceneBuffer
 	uint FrameIndex;
 } u_SceneData;
 
-const float PI = 3.14159;
+const float PI = 3.14159265359;
 
 layout(location = 0) rayPayloadEXT Payload g_RayPayload;
 
@@ -72,6 +72,101 @@ vec2 RandomPointInCircle(inout uint seed)
 	return pointOnCircle * sqrt(RandomValue(seed));
 }
 
+vec3 SampleCosineWeightedHemisphere(vec3 normal, inout uint seed)
+{
+    vec2 u = vec2(RandomValue(seed), RandomValue(seed));
+
+    float r = sqrt(u.x);
+    float theta = 2.0 * PI * u.y;
+ 
+    vec3 B = normalize( cross( normal, vec3(0.0,1.0,1.0) ) );
+	vec3 T = cross( B, normal );
+    
+    return normalize(r * sin(theta) * B + sqrt(1.0 - u.x) * normal + r * cos(theta) * T);
+}
+
+// ----------------------------------------------------------------------------
+
+vec3 FresnelSchlickRoughness(vec3 F0, float cosTheta, float roughness)
+{
+	return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+float NdfGGX(float cosLh, float roughness)
+{
+	float alpha = roughness * roughness;
+	float alphaSq = alpha * alpha;
+
+	float denom = (cosLh * cosLh) * (alphaSq - 1.0) + 1.0;
+	return alphaSq / (PI * denom * denom);
+}
+
+float GaSchlickG1(float cosTheta, float k)
+{
+	return cosTheta / (cosTheta * (1.0 - k) + k);
+}
+
+float GaSchlickGGX(float cosLi, float NdotV, float roughness)
+{
+	float r = roughness + 1.0;
+	float k = (r * r) / 8.0;
+	return GaSchlickG1(cosLi, k) * GaSchlickG1(NdotV, k);
+}
+
+// Returns next ray direction
+vec3 SampleMicrofacetBRDF(Ray ray, Payload payload, inout uint seed, out vec3 throughput)
+{
+	vec3 F0 = mix(vec3(0.04), payload.Albedo, payload.Metallic);
+
+	payload.Roughness = max(0.05, payload.Roughness);
+
+	bool specular = RandomValue(seed) > 0.5;
+
+	if (specular) // Specular pass
+	{
+		float r2 = payload.Roughness * payload.Roughness;
+		float theta = acos(sqrt((1.0 - RandomValue(seed)) / (1.0 + (r2 * r2 - 1.0) * RandomValue(seed))));
+		float phi = 2.0 * PI * RandomValue(seed);
+
+		vec3 dir = vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+
+		vec3 H = normalize(payload.WorldNormal + dir * r2);
+		vec3 L = reflect(-payload.View, H);
+
+		float cosLh = clamp(dot(payload.WorldNormal, H), 0.0, 1.0);
+		float cosLi = clamp(dot(payload.WorldNormal, L), 0.0, 1.0);
+		float NdotV = clamp(dot(payload.WorldNormal, payload.View), 0.0, 1.0);
+		float VdotH = clamp(dot(payload.View, H), 0.0, 1.0);
+
+		vec3 F = FresnelSchlickRoughness(F0, max(0.0, clamp(dot(H, payload.View), 0.0, 1.0)), payload.Roughness);
+		float D = NdfGGX(cosLh, payload.Roughness);
+		float G = GaSchlickGGX(cosLi, NdotV, payload.Roughness);
+
+		throughput = F * G * VdotH / max(0.0001, cosLi * NdotV);
+		throughput *= 2.0;
+
+		return L;
+	}
+	else // Diffuse pass
+	{
+		float theta = asin(sqrt(RandomValue(seed)));
+		float phi = 2.0 * PI * RandomValue(seed);
+
+		vec3 dir = vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+
+		vec3 L = normalize(payload.WorldNormal + dir);
+		vec3 H = normalize(payload.View + L);
+	
+		vec3 F = FresnelSchlickRoughness(F0, max(0.0, clamp(dot(H, payload.View), 0.0, 1.0)), payload.Roughness);
+		vec3 kd = (1.0 - F) * (1.0 - payload.Metallic);
+
+		throughput = kd * payload.Albedo;
+		throughput *= 2.0;
+
+		return L;
+	}
+}
+
 // ----------------------------------------------------------------------------
 
 // NOTE: Image gets far too bright with too many bounces
@@ -82,11 +177,12 @@ vec3 TracePath(Ray ray, inout uint seed)
 	uint flags = gl_RayFlagsOpaqueEXT;
 	uint mask = 0xff;
 
-	vec3 throughput = vec3(1.0); // the amount of energy reflected vs. absorbed
+	vec3 totalThroughput = vec3(1.0); // the amount of energy reflected vs. absorbed
+	vec3 directThroughput = vec3(0.0);
 	vec3 light = vec3(0.0);
 
-	const int MAX_BOUNCES = 5;
-	 
+	const int MAX_BOUNCES = 50;
+	
 	for (int bounceIndex = 0; bounceIndex < MAX_BOUNCES; bounceIndex++)
 	{
 		traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, ray.Origin, ray.TMin, ray.Direction, ray.TMax, 0);
@@ -95,19 +191,22 @@ vec3 TracePath(Ray ray, inout uint seed)
 		if (payload.Distance == -1)
 		{
 			vec3 skyColor = vec3(0.53, 0.80, 0.92);
-			light += skyColor * throughput;
+			light += skyColor * totalThroughput;
 
 			break;
 		}
 	
-		throughput *= payload.Albedo;
-		light += payload.Emission * throughput;
+		vec3 BRDFThroughput;
+		ray.Direction = SampleMicrofacetBRDF(ray, payload, seed, BRDFThroughput);
+		totalThroughput *= BRDFThroughput;
 
-		ray.Direction = normalize(payload.WorldNormal + RandomDirection(seed));
-		ray.Origin = payload.WorldPosition + (payload.WorldNormal * 0.0001 - ray.Direction * 0.0001);
+		directThroughput += payload.Emission;
+		directThroughput *= 0.7;
+
+		ray.Origin = payload.WorldPosition + (payload.WorldNormal * 0.00001 - ray.Direction * 0.00001);
 	}
 
-	return light;
+	return light + directThroughput;
 }
 
 void main()
