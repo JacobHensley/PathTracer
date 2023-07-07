@@ -184,7 +184,7 @@ void main()
 	g_RayPayload.WorldNormal		= worldNormal;
 	g_RayPayload.WorldNormalMatrix	= worldNormalMatrix;
 	g_RayPayload.Binormal			= vertex.Binormal;
-	g_RayPayload.Tangent			= vec3(vertex.Tangent);
+	g_RayPayload.Tangent			= vec3(vertex.Tangent.xyz);
 	g_RayPayload.View				= view;
 
 	// gl_InstanceCustomIndexEXT: Cornell Box
