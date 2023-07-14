@@ -155,11 +155,13 @@ vec3 TracePath(Ray ray, inout uint seed)
 			break;
 		}
 
-		mat3 tangentToWorld = payload.WorldNormalMatrix;
+		mat3 tangentToWorld = mat3(payload.Tangent * vec3(1, 1, -1), payload.Binormal * vec3(1, 1, -1), payload.WorldNormal * vec3(1, 1, -1));
 		const vec3 positionWS = payload.WorldPosition;
 		const vec3 incomingRayOriginWS = ray.Origin; // gl_WorldRayOriginEXT;
 		const vec3 incomingRayDirWS = ray.Direction; // gl_WorldRayDirectionEXT;
 		vec3 normalWS = payload.WorldNormal;
+
+	//	return tangentToWorld[0] * 0.5 + 0.5;
 
 		vec3 baseColor = payload.Albedo;
 		float metallic = payload.Metallic;
@@ -175,17 +177,21 @@ vec3 TracePath(Ray ray, inout uint seed)
 
 		vec3 rayDirTS = vec3(0.0);
 
+		// Suspicious
+		uint sampleSeed = seed + bounceIndex;
+		vec2 brdfSample = vec2(RandomValue(sampleSeed), RandomValue(sampleSeed));
+
 		ray.Origin = positionWS;
 		if (selector < 0.5)
 		{
+			brdfSample.x *= 2.0f;
 			// WS
 			ray.Direction = GetRandomCosineDirectionOnHemisphere(normalWS, seed);
 			throughput *= diffuseAlbedo;
 		}
 		else
 		{
-			// Suspicious
-			vec2 brdfSample = vec2(RandomValue(seed), RandomValue(seed));
+			brdfSample.x = (brdfSample.x - 0.5f) * 2.0f;
 
 			vec3 incomingRayDirTS = normalize(tangentToWorld * incomingRayDirWS);
 			vec3 microfacetNormalTS = SampleGGXVisibleNormal(-incomingRayDirTS, roughness, roughness, brdfSample.x, brdfSample.y);
@@ -193,12 +199,11 @@ vec3 TracePath(Ray ray, inout uint seed)
 
 			vec3 normalTS = vec3(0.0, 0.0, 1.0);
 
-			//vec3 F = AppSettings.EnableWhiteFurnaceMode ? 1.0.xxx : Fresnel(specularAlbedo, microfacetNormalTS, sampleDirTS);
 			vec3 F = Fresnel(specularAlbedo, microfacetNormalTS, sampleDirTS);
 			float G1 = SmithGGXMasking(normalTS, sampleDirTS, -incomingRayDirTS, roughness * roughness);
 			float G2 = SmithGGXMaskingShadowing(normalTS, sampleDirTS, -incomingRayDirTS, roughness * roughness);
 
-			ray.Direction = normalize(tangentToWorld * sampleDirTS);
+			ray.Direction = normalize(transpose(tangentToWorld) * sampleDirTS);
 			throughput *= (F * (G2 / G1));
 		}
 
