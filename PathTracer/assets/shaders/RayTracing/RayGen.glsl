@@ -137,11 +137,13 @@ vec3 TracePath(Ray ray, inout uint seed)
 	uint flags = gl_RayFlagsOpaqueEXT;
 	uint mask = 0xff;
 
-	const int MAX_BOUNCES = 10;
+	const int MAX_BOUNCES = 1;
 
 	vec3 radiance = vec3(0.0);
 	vec3 throughput = vec3(1.0);
 	
+	vec3 specularComponent = vec3(0.0);
+
 	for (int bounceIndex = 0; bounceIndex < MAX_BOUNCES; bounceIndex++)
 	{
 		traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, ray.Origin, ray.TMin, ray.Direction, ray.TMax, 0);
@@ -155,10 +157,10 @@ vec3 TracePath(Ray ray, inout uint seed)
 			break;
 		}
 
-		mat3 tangentToWorld = mat3(payload.Tangent * vec3(1, 1, -1), payload.Binormal * vec3(1, 1, -1), payload.WorldNormal * vec3(1, 1, -1));
+		mat3 tangentToWorld = mat3(payload.Tangent * vec3(1, 1, 1), payload.Binormal * vec3(1, 1, 1), payload.WorldNormal * vec3(1, 1, 1));
 		const vec3 positionWS = payload.WorldPosition;
 		const vec3 incomingRayOriginWS = ray.Origin; // gl_WorldRayOriginEXT;
-		const vec3 incomingRayDirWS = ray.Direction; // gl_WorldRayDirectionEXT;
+		const vec3 incomingRayDirWS = payload.WorldRayDirection; // gl_WorldRayDirectionEXT;
 		vec3 normalWS = payload.WorldNormal;
 
 	//	return tangentToWorld[0] * 0.5 + 0.5;
@@ -166,15 +168,15 @@ vec3 TracePath(Ray ray, inout uint seed)
 		vec3 baseColor = payload.Albedo;
 		float metallic = payload.Metallic;
 		float roughness = payload.Roughness;
+		roughness = max(0.05, roughness);
+		roughness = 0.5;
+		metallic=1.0;
 		//vec3 radiance = payload.Emission;
 
 		const vec3 diffuseAlbedo = mix(baseColor, vec3(0.0), vec3(metallic));
 		const vec3 specularAlbedo = mix(vec3(0.04), baseColor, vec3(metallic));
 
 		float selector = RandomValue(seed);
-		selector = 0.0;
-		selector = 1.0;
-
 		vec3 rayDirTS = vec3(0.0);
 
 		// Suspicious
@@ -182,6 +184,7 @@ vec3 TracePath(Ray ray, inout uint seed)
 		vec2 brdfSample = vec2(RandomValue(sampleSeed), RandomValue(sampleSeed));
 
 		ray.Origin = positionWS;
+		selector = 1.0;
 		if (selector < 0.5)
 		{
 			brdfSample.x *= 2.0f;
@@ -191,9 +194,9 @@ vec3 TracePath(Ray ray, inout uint seed)
 		}
 		else
 		{
-			brdfSample.x = (brdfSample.x - 0.5f) * 2.0f;
+			//brdfSample.x = (brdfSample.x - 0.5f) * 2.0f;
 
-			vec3 incomingRayDirTS = normalize(tangentToWorld * incomingRayDirWS);
+			vec3 incomingRayDirTS = normalize(transpose(tangentToWorld) * incomingRayDirWS);
 			vec3 microfacetNormalTS = SampleGGXVisibleNormal(-incomingRayDirTS, roughness, roughness, brdfSample.x, brdfSample.y);
 			vec3 sampleDirTS = reflect(incomingRayDirTS, microfacetNormalTS);
 
@@ -203,15 +206,24 @@ vec3 TracePath(Ray ray, inout uint seed)
 			float G1 = SmithGGXMasking(normalTS, sampleDirTS, -incomingRayDirTS, roughness * roughness);
 			float G2 = SmithGGXMaskingShadowing(normalTS, sampleDirTS, -incomingRayDirTS, roughness * roughness);
 
-			ray.Direction = normalize(transpose(tangentToWorld) * sampleDirTS);
+			ray.Direction = normalize(tangentToWorld * sampleDirTS);
 			throughput *= (F * (G2 / G1));
+
+			return microfacetNormalTS;
 		}
 
 		throughput *= 2.0;
 
 	}
 
-	return radiance;
+
+	//if (all(equal(specularComponent, vec3(0))))
+	//	return vec3(0, 1, 0);
+
+	//if (all(lessThan(specularComponent, vec3(0.01))))// && all(greaterThan(specularComponent, vec3(-0.0001))))
+	//	return vec3(1, 0, 1);
+	
+	return throughput;
 }
 
 void main()
@@ -267,5 +279,9 @@ void main()
 	}
 
 	color /= numPaths;
-	imageStore(o_Image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
+
+	if (any(isnan(color)))
+		imageStore(o_Image, ivec2(gl_LaunchIDEXT.xy), vec4(1, 0, 0, 1));
+	else
+		imageStore(o_Image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
 }

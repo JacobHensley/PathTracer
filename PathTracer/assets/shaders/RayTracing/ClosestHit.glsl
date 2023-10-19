@@ -166,9 +166,9 @@ void main()
 		NormalMapTextureValue = texture(u_Textures[material.NormalMapIndex], vertex.TextureCoords).rgb;
 
 	// If using a normal map apply it 
-	if (material.UseNormalMap == 1.0 && material.NormalMapIndex != -1)
+	if (false && material.UseNormalMap == 1.0 && material.NormalMapIndex != -1)
 	{
-		vec3 normal = normalize(texture(u_Textures[material.NormalMapIndex], vertex.TextureCoords).rgb * 2.0 - 1.0);
+		vec3 normal = normalize(NormalMapTextureValue * 2.0 - 1.0);
 		normal = normalize(worldNormalMatrix * normal);
 
 		worldNormal = normal;
@@ -184,8 +184,11 @@ void main()
 	g_RayPayload.WorldNormal		= worldNormal;
 	g_RayPayload.WorldNormalMatrix	= worldNormalMatrix;
 	g_RayPayload.Binormal			= vertex.Binormal;
+	g_RayPayload.Binormal			= normalize(mat3(gl_ObjectToWorldEXT) * vertex.Binormal);
 	g_RayPayload.Tangent			= vec3(vertex.Tangent.xyz);
+	g_RayPayload.Tangent			= normalize(mat3(gl_ObjectToWorldEXT) * vec3(vertex.Tangent.xyz));
 	g_RayPayload.View				= view;
+	g_RayPayload.WorldRayDirection	= gl_WorldRayDirectionEXT;
 
 	// gl_InstanceCustomIndexEXT: Cornell Box
 	// 0:  Back wall

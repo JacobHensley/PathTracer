@@ -10,9 +10,9 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
-	m_Mesh = CreateRef<Mesh>("assets/models/CornellBox.gltf");
+	//m_Mesh = CreateRef<Mesh>("assets/models/CornellBoxReturns.gltf");
 	//m_Mesh = CreateRef<Mesh>("assets/models/Suzanne/glTF/Suzanne.gltf");
-	//m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
+	m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
 
 	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
@@ -51,7 +51,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 	{
 		AccelerationStructureSpecification spec;
 		spec.Mesh = m_Mesh;
-		spec.Transform = glm::mat4(1.0f) * glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
+		spec.Transform = glm::mat4(1.0f) * glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
 		m_AccelerationStructure = CreateRef<AccelerationStructure>(spec);
 	}
 
@@ -316,6 +316,8 @@ void RayTracingLayer::OnImGUIRender()
 		if (!CreateRayTracingPipeline())
 			LOG_CRITICAL("Failed to create Ray Tracing pipeline!");
 	}
+
+	ImGui::Checkbox("Accumulate", &m_Accumulate);
 
 	ImGui::Separator();
 

@@ -11,4 +11,5 @@ struct Payload
 	vec3 Binormal;
 	vec3 Tangent;
 	vec3 View;
+	vec3 WorldRayDirection;
 };
