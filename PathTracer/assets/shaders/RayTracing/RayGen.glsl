@@ -1,7 +1,8 @@
 #Shader RayGen
 #version 460
 #extension GL_EXT_ray_tracing : require
-#include "assets/shaders/RayTracing/Globals.h"
+
+#include "assets/shaders/RayTracing/Disney.glsl"
 
 layout(binding = 0) uniform accelerationStructureEXT u_TopLevelAS;
 
@@ -31,44 +32,7 @@ layout(binding = 7) uniform SceneBuffer
 	uint FrameIndex;
 } u_SceneData;
 
-const float PI = 3.14159265359;
-const float TWO_PI = PI * 2.0;
-
 layout(location = 0) rayPayloadEXT Payload g_RayPayload;
-
-// ----------------------------------------------------------------------------
-
-uint PCG_Hash(inout uint seed)
-{
-	seed = seed * 747796405 + 2891336453;
-	uint result = ((seed >> ((seed >> 28) + 4)) ^ seed) * 277803737;
-	return (result >> 22) ^ result;
-}
-
-float RandomValue(inout uint seed)
-{
-	return PCG_Hash(seed) / 4294967295.0;
-}
-
-vec2 RandomPointInCircle(inout uint seed)
-{
-	float angle = RandomValue(seed) * 2 * PI;
-	vec2 pointOnCircle = vec2(cos(angle), sin(angle));
-	return pointOnCircle * sqrt(RandomValue(seed));
-}
-
-// Compute a cosine distributed random direction on the hemisphere about the given (normal) direction.
-vec3 GetRandomCosineDirectionOnHemisphere(vec3 direction, inout uint seed)
-{
-	// Choose random points on the unit sphere offset along the surface normal
-	// to produce a cosine distribution of random directions.
-	float a = RandomValue(seed) * TWO_PI;
-	float z = RandomValue(seed) * 2.0 - 1.0;
-	float r = sqrt(1.0 - z * z);
-
-	vec3 p = vec3(r * cos(a), r * sin(a), z) + direction;
-	return normalize(p);
-}
 
 // ----------------------------------------------------------------------------
 // From DirectX Path Tracing thing
@@ -132,98 +96,97 @@ float SmithGGXMaskingShadowing(vec3 n, vec3 l, vec3 v, float a2)
 
 // ----------------------------------------------------------------------------
 
+vec3 DisneySample2(Payload payload, vec3 V, vec3 N, out vec3 L, out float pdf, inout uint seed)
+{
+	return vec3(0.0);
+}
+
 vec3 TracePath(Ray ray, inout uint seed)
 {
 	uint flags = gl_RayFlagsOpaqueEXT;
 	uint mask = 0xff;
 
-	const int MAX_BOUNCES = 1;
+	const int MAX_BOUNCES = 5;
 
 	vec3 radiance = vec3(0.0);
 	vec3 throughput = vec3(1.0);
 	
 	vec3 specularComponent = vec3(0.0);
 
+	bool surfaceScatter = false;
+
+	ScatterSampleRec scatterSample;
+
 	for (int bounceIndex = 0; bounceIndex < MAX_BOUNCES; bounceIndex++)
 	{
 		traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, ray.Origin, ray.TMin, ray.Direction, ray.TMax, 0);
 		Payload payload = g_RayPayload;
 
+		// MISS
 		if (payload.Distance < 0.0)
 		{
 			// Miss, hit sky light
-			const vec3 skyColor = vec3(0.7, 0.75, 0.95);
+			const vec3 skyColor = vec3(0.7, 0.75, 0.95) * 10.0;
 			radiance += skyColor * throughput;
-			break;
-		}
 
-		mat3 tangentToWorld = mat3(payload.Tangent * vec3(1, 1, 1), payload.Binormal * vec3(1, 1, 1), payload.WorldNormal * vec3(1, 1, 1));
-		const vec3 positionWS = payload.WorldPosition;
-		const vec3 incomingRayOriginWS = ray.Origin; // gl_WorldRayOriginEXT;
-		const vec3 incomingRayDirWS = payload.WorldRayDirection; // gl_WorldRayDirectionEXT;
-		vec3 normalWS = payload.WorldNormal;
+// TODO: ENV MAP
+#ifdef OPT_ENVMAP
+                vec4 envMapColPdf = EvalEnvMap(r);
 
-	//	return tangentToWorld[0] * 0.5 + 0.5;
+                float misWeight = 1.0;
 
-		vec3 baseColor = payload.Albedo;
-		float metallic = payload.Metallic;
-		float roughness = payload.Roughness;
-		roughness = max(0.05, roughness);
-		roughness = 0.5;
-		metallic=1.0;
-		//vec3 radiance = payload.Emission;
+                // Gather radiance from envmap and use scatterSample.pdf from previous bounce for MIS
+                if (state.depth > 0)
+                    misWeight = PowerHeuristic(scatterSample.pdf, envMapColPdf.w);
 
-		const vec3 diffuseAlbedo = mix(baseColor, vec3(0.0), vec3(metallic));
-		const vec3 specularAlbedo = mix(vec3(0.04), baseColor, vec3(metallic));
+			#if defined(OPT_MEDIUM) && !defined(OPT_VOL_MIS)
+                if(!surfaceScatter)
+                    misWeight = 1.0f;
+			#endif
 
-		float selector = RandomValue(seed);
-		vec3 rayDirTS = vec3(0.0);
+                if(misWeight > 0)
+                    radiance += misWeight * envMapColPdf.rgb * throughput * envMapIntensity;
+#endif
+             break;
+        }
 
-		// Suspicious
-		uint sampleSeed = seed + bounceIndex;
-		vec2 brdfSample = vec2(RandomValue(sampleSeed), RandomValue(sampleSeed));
+		radiance += payload.Emission * throughput;
 
-		ray.Origin = positionWS;
-		selector = 1.0;
-		if (selector < 0.5)
 		{
-			brdfSample.x *= 2.0f;
-			// WS
-			ray.Direction = GetRandomCosineDirectionOnHemisphere(normalWS, seed);
-			throughput *= diffuseAlbedo;
-		}
-		else
-		{
-			//brdfSample.x = (brdfSample.x - 0.5f) * 2.0f;
+			surfaceScatter = true;
 
-			vec3 incomingRayDirTS = normalize(transpose(tangentToWorld) * incomingRayDirWS);
-			vec3 microfacetNormalTS = SampleGGXVisibleNormal(-incomingRayDirTS, roughness, roughness, brdfSample.x, brdfSample.y);
-			vec3 sampleDirTS = reflect(incomingRayDirTS, microfacetNormalTS);
+			// Next event estimation
+			// radiance += DirectLight(r, payload, true) * throughput;
 
-			vec3 normalTS = vec3(0.0, 0.0, 1.0);
+			// Sample BSDF for color and outgoing direction
+			scatterSample.f = DisneySample(payload, -ray.Direction, payload.WorldNormal, scatterSample.L, scatterSample.pdf, seed);
+			if (scatterSample.pdf > 0.0)
+				throughput *= scatterSample.f / scatterSample.pdf;
+			else
+				break;
+         }
 
-			vec3 F = Fresnel(specularAlbedo, microfacetNormalTS, sampleDirTS);
-			float G1 = SmithGGXMasking(normalTS, sampleDirTS, -incomingRayDirTS, roughness * roughness);
-			float G2 = SmithGGXMaskingShadowing(normalTS, sampleDirTS, -incomingRayDirTS, roughness * roughness);
+        // Move ray origin to hit point and set direction for next bounce
+		vec3 fhp = ray.Origin + ray.Direction * payload.Distance;
 
-			ray.Direction = normalize(tangentToWorld * sampleDirTS);
-			throughput *= (F * (G2 / G1));
+        ray.Direction = scatterSample.L;
+		const float EPS = 0.0003;
+        ray.Origin = fhp + ray.Direction * EPS;
 
-			return microfacetNormalTS;
-		}
 
-		throughput *= 2.0;
-
+// TODO: RR
+#ifdef OPT_RR
+        // Russian roulette
+        if (state.depth >= OPT_RR_DEPTH)
+        {
+            float q = min(max(throughput.x, max(throughput.y, throughput.z)) + 0.001, 0.95);
+            if (rand() > q)
+                break;
+            throughput /= q;
+        }
+#endif
 	}
-
-
-	//if (all(equal(specularComponent, vec3(0))))
-	//	return vec3(0, 1, 0);
-
-	//if (all(lessThan(specularComponent, vec3(0.01))))// && all(greaterThan(specularComponent, vec3(-0.0001))))
-	//	return vec3(1, 0, 1);
-	
-	return throughput;
+	return radiance;
 }
 
 void main()
