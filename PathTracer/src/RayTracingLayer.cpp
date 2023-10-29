@@ -1,5 +1,7 @@
 #include "RayTracingLayer.h"
 #include "Core/Application.h"
+#include "Input/Input.h"
+#include "Input/KeyCodes.h"
 #include "ImGui/imgui.h"
 #include "ImGui/imgui_impl_vulkan.h"
 #include <glm/gtc/matrix_transform.hpp>
@@ -10,9 +12,9 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
-	//m_Mesh = CreateRef<Mesh>("assets/models/CornellBoxReturns.gltf");
+	m_Mesh = CreateRef<Mesh>("assets/models/CornellBox.gltf");
 	//m_Mesh = CreateRef<Mesh>("assets/models/Suzanne/glTF/Suzanne.gltf");
-	m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
+	//m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
 
 	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
@@ -21,8 +23,9 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 
 	m_CameraUniformBuffer = CreateRef<UniformBuffer>(&m_CameraBuffer, sizeof(CameraBuffer));
 
-	m_DescriptorPool = CreateDescriptorPool();
-	m_ViewportImageDescriptorSet = VkTools::AllocateDescriptorSet(m_DescriptorPool, &ImGui_ImplVulkan_GetDescriptorSetLayout());
+	m_DescriptorPool = VkTools::CreateDescriptorPool();
+
+	m_ViewportPanel = CreateRef<ViewportPanel>();
 
 	// Preetham Sky
 	{
@@ -51,7 +54,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 	{
 		AccelerationStructureSpecification spec;
 		spec.Mesh = m_Mesh;
-		spec.Transform = glm::mat4(1.0f) * glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+		spec.Transform = glm::mat4(1.0f);
 		m_AccelerationStructure = CreateRef<AccelerationStructure>(spec);
 	}
 
@@ -171,8 +174,8 @@ void RayTracingLayer::RayTracingPass()
 		&shaderBindingTable[1].StridedDeviceAddressRegion,
 		&shaderBindingTable[2].StridedDeviceAddressRegion,
 		&empty,
-		m_ViewportWidth,
-		m_ViewportHeight,
+		m_ViewportPanel->GetSize().x,
+		m_ViewportPanel->GetSize().y,
 		1);
 
 	m_SceneBuffer.FrameIndex++;
@@ -235,12 +238,10 @@ void RayTracingLayer::OnRender()
 	/////////////////////////////////////////////
 
 	// Handle resize
-	if (m_NeedsResize)
+	if (m_ViewportPanel->HasResized())
 	{
-		m_NeedsResize = false;
-		
-		m_Image->Resize(m_ViewportWidth, m_ViewportHeight);
-		m_AccumulationImage->Resize(m_ViewportWidth, m_ViewportHeight);
+		m_Image->Resize(m_ViewportPanel->GetSize().x, m_ViewportPanel->GetSize().y);
+		m_AccumulationImage->Resize(m_ViewportPanel->GetSize().x, m_ViewportPanel->GetSize().y);
 
 		m_SceneBuffer.FrameIndex = 1;
 	}
@@ -249,7 +250,7 @@ void RayTracingLayer::OnRender()
 
 	// Update camera uniform buffer
 	{
-		m_Camera->Resize(m_ViewportWidth, m_ViewportHeight);
+		m_Camera->Resize(m_ViewportPanel->GetSize().x, m_ViewportPanel->GetSize().y);
 
 		m_CameraBuffer.ViewProjection = m_Camera->GetViewProjection();
 		m_CameraBuffer.InverseViewProjection = m_Camera->GetInverseViewProjection();
@@ -274,40 +275,7 @@ void RayTracingLayer::OnRender()
 
 void RayTracingLayer::OnImGUIRender()
 {
-	ImGuiIO io = ImGui::GetIO();
-	io.ConfigWindowsMoveFromTitleBarOnly = true;
-	ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse;
-	bool open = true;
-
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-	ImGui::Begin("RTX On", &open, flags);
-
-	ImVec2 size = ImGui::GetContentRegionAvail();
-
-	if (m_ViewportWidth != size.x || m_ViewportHeight != size.y)
-	{
-		m_NeedsResize = true;
-		m_ViewportWidth = size.x;
-		m_ViewportHeight = size.y;
-	}
-
-	// Update viewport descriptor on reisze
-	{
-		Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
-
-		const VkDescriptorImageInfo& descriptorInfo = m_Image->GetDescriptorImageInfo();
-		if (m_ViewportImageView != descriptorInfo.imageView)
-		{
-			VkWriteDescriptorSet writeDescriptor = VkTools::WriteDescriptorSet(m_ViewportImageDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &descriptorInfo);
-			vkUpdateDescriptorSets(device->GetLogicalDevice(), 1, &writeDescriptor, 0, nullptr);
-			m_ViewportImageView = descriptorInfo.imageView;
-		}
-	}
-
-	ImGui::Image(m_ViewportImageDescriptorSet, ImVec2(size.x, size.y), ImVec2::ImVec2(0, 1), ImVec2::ImVec2(1, 0));
-
-	ImGui::End();
-	ImGui::PopStyleVar();
+	m_ViewportPanel->Render(m_Image);
 
 	ImGui::Begin("Settings");
 
@@ -329,29 +297,4 @@ void RayTracingLayer::OnImGUIRender()
 		m_UpdateSkyBox = true;
 
 	ImGui::End();
-}
-
-VkDescriptorPool RayTracingLayer::CreateDescriptorPool()
-{
-	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
-
-	VkDescriptorPoolSize poolSizes[] =
-	{
-		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 10 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10 }
-	};
-
-	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
-	descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	descriptorPoolCreateInfo.flags = 0;
-	descriptorPoolCreateInfo.maxSets = 1000;
-	descriptorPoolCreateInfo.poolSizeCount = 1;
-	descriptorPoolCreateInfo.pPoolSizes = poolSizes;
-
-	VkDescriptorPool pool;
-	VK_CHECK_RESULT(vkCreateDescriptorPool(device->GetLogicalDevice(), &descriptorPoolCreateInfo, nullptr, &pool));
-
-	return pool;
 }

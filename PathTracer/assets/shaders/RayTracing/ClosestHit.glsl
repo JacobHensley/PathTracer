@@ -195,9 +195,6 @@ void main()
 	g_RayPayload.Roughness = 0.04;
 	g_RayPayload.Metallic = 0.0;
 
-	if (gl_InstanceCustomIndexEXT == 5)
-		g_RayPayload.Emission = vec3(2.0);
-
 	// NEW
 	float aspect = sqrt(1.0 - g_RayPayload.Anisotropic * 0.9);
     g_RayPayload.ax = max(0.001, g_RayPayload.Roughness / aspect);

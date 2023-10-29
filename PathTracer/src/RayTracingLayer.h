@@ -8,6 +8,7 @@
 #include "Graphics/AccelerationStructure.h"
 #include "Graphics/RayTracingPipeline.h"
 #include "Graphics/ComputePipeline.h"
+#include "ImGui/Panels/ViewportPanel.h"
 #include <vulkan/vulkan.h>
 
 using namespace VkLibrary;
@@ -45,12 +46,8 @@ class RayTracingLayer : public Layer
 		void RayTracingPass();
 		bool CreateRayTracingPipeline();
 
-		VkDescriptorPool CreateDescriptorPool();
-
 	private:
 		Ref<Mesh> m_Mesh;
-
-		bool m_NeedsResize = false;
 
 		Ref<Camera> m_Camera;
 		CameraBuffer m_CameraBuffer;
@@ -77,8 +74,5 @@ class RayTracingLayer : public Layer
 		glm::vec3 m_SkyboxSettings = { 3.14f, 0.0f, 0.0f };
 		bool m_UpdateSkyBox = true;
 
-		VkDescriptorSet m_ViewportImageDescriptorSet = VK_NULL_HANDLE;
-		VkImageView m_ViewportImageView = VK_NULL_HANDLE;
-		uint32_t m_ViewportWidth = 1;
-		uint32_t m_ViewportHeight = 1;
+		Ref<ViewportPanel> m_ViewportPanel;
 };
