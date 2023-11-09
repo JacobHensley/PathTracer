@@ -48,6 +48,7 @@ class RayTracingLayer : public Layer
 
 	private:
 		Ref<Mesh> m_Mesh;
+		glm::mat4 m_Transform;
 
 		Ref<Camera> m_Camera;
 		CameraBuffer m_CameraBuffer;
@@ -75,4 +76,5 @@ class RayTracingLayer : public Layer
 		bool m_UpdateSkyBox = true;
 
 		Ref<ViewportPanel> m_ViewportPanel;
+		int m_SelectedSubMeshIndex = -1;
 };

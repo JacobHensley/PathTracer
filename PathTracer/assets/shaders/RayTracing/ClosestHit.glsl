@@ -190,18 +190,14 @@ void main()
 	g_RayPayload.View				= view;
 	g_RayPayload.WorldRayDirection	= gl_WorldRayDirectionEXT;
 
+	// NEW
 	g_RayPayload.Anisotropic = 0.0;
 
-	g_RayPayload.Roughness = 0.04;
-	g_RayPayload.Metallic = 0.0;
-
-	// NEW
 	float aspect = sqrt(1.0 - g_RayPayload.Anisotropic * 0.9);
     g_RayPayload.ax = max(0.001, g_RayPayload.Roughness / aspect);
     g_RayPayload.ay = max(0.001, g_RayPayload.Roughness * aspect);
 
 	g_RayPayload.ior = 1.0;
-
 	g_RayPayload.eta = dot(view, worldNormal) < 0.0 ? (1.0 / g_RayPayload.ior ) : g_RayPayload.ior;
 
 	// gl_InstanceCustomIndexEXT: Cornell Box

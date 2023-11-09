@@ -12,9 +12,11 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
-	m_Mesh = CreateRef<Mesh>("assets/models/CornellBox.gltf");
+	//m_Mesh = CreateRef<Mesh>("assets/models/CornellBox.gltf");
 	//m_Mesh = CreateRef<Mesh>("assets/models/Suzanne/glTF/Suzanne.gltf");
-	//m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
+	m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
+
+	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
 
 	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
@@ -54,7 +56,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 	{
 		AccelerationStructureSpecification spec;
 		spec.Mesh = m_Mesh;
-		spec.Transform = glm::mat4(1.0f);
+		spec.Transform = m_Transform;
 		m_AccelerationStructure = CreateRef<AccelerationStructure>(spec);
 	}
 
@@ -214,6 +216,11 @@ void RayTracingLayer::OnUpdate()
 
 	m_SceneUniformBuffer->SetData(&m_SceneBuffer);
 
+	if (Input::IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && m_ViewportPanel->IsHovered())
+	{
+		m_SelectedSubMeshIndex = m_Mesh->RayIntersection(m_ViewportPanel->CastMouseRay(m_Camera), m_Transform);
+	}
+
 	// Dispatch PreethamSky compute shader 
 	if (m_UpdateSkyBox) 
 	{
@@ -287,14 +294,32 @@ void RayTracingLayer::OnImGUIRender()
 
 	ImGui::Checkbox("Accumulate", &m_Accumulate);
 
-	ImGui::Separator();
+	if (m_SelectedSubMeshIndex > -1)
+	{
+		ImGui::Separator();
 
-	if (ImGui::DragFloat("Turbidity",   &m_SkyboxSettings.x, 0.01f, 1.3, 10.0f))
-		m_UpdateSkyBox = true;
-	if (ImGui::DragFloat("Azimuth",     &m_SkyboxSettings.y, 0.01f, 0, 2 * 3.14))
-		m_UpdateSkyBox = true;
-	if (ImGui::DragFloat("Inclination", &m_SkyboxSettings.z, 0.01f, 0, 2 * 3.14))
-		m_UpdateSkyBox = true;
+		uint32_t materialIndex = m_Mesh->GetSubMeshes()[m_SelectedSubMeshIndex].MaterialIndex;
+		MaterialBuffer& materialBuffer = m_Mesh->GetMaterialBuffers()[materialIndex];
+		bool updated = false;
+
+		if (ImGui::ColorEdit3("Albdeo", glm::value_ptr(materialBuffer.AlbedoValue)))
+			updated = true;
+		if (ImGui::DragFloat("Metallic", &materialBuffer.MetallicValue, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::DragFloat("Roughness", &materialBuffer.RoughnessValue, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::ColorEdit3("Emissive Color", glm::value_ptr(materialBuffer.EmissiveValue)))
+			updated = true;
+		if (ImGui::DragFloat("Emissive Strength", &materialBuffer.EmissiveStrength, 0.1f, 0.0f, 10.0f))
+			updated = true;
+
+		if (updated)
+		{
+			m_SceneBuffer.FrameIndex = 1;
+			m_AccelerationStructure->UpdateMaterialData();
+		}
+	}
+
 
 	ImGui::End();
 }
