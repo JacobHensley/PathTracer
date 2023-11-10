@@ -4,6 +4,7 @@
 #include "Input/KeyCodes.h"
 #include "ImGui/imgui.h"
 #include "ImGui/imgui_impl_vulkan.h"
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -12,16 +13,20 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
-	//m_Mesh = CreateRef<Mesh>("assets/models/CornellBox.gltf");
 	//m_Mesh = CreateRef<Mesh>("assets/models/Suzanne/glTF/Suzanne.gltf");
 	m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
+	//m_Mesh = CreateRef<Mesh>("assets/models/CornellBox.gltf");
 
 	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+	//m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
 
 	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
 	CameraSpecification cameraSpec;
+	cameraSpec.pitch = 0.208f;
+	cameraSpec.yaw = 1.731f;
 	m_Camera = CreateRef<Camera>(cameraSpec);
+	m_Camera->SetPosition({ -12.5f, 6.7f, -1.85f });
 
 	m_CameraUniformBuffer = CreateRef<UniformBuffer>(&m_CameraBuffer, sizeof(CameraBuffer));
 
@@ -54,6 +59,22 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 	}
 
 	{
+		ImageSpecification imageSpec;
+		imageSpec.DebugName = "PostProcessing";
+		imageSpec.Format = ImageFormat::RGBA8;
+		imageSpec.Usage = ImageUsage::STORAGE_IMAGE_2D;
+		imageSpec.Width = 1;
+		imageSpec.Height = 1;
+		m_PostProcessingImage = CreateRef<Image>(imageSpec);
+
+		ComputePipelineSpecification pipelineSpec;
+		pipelineSpec.Shader = CreateRef<Shader>("assets/shaders/PostProcessing.glsl");;
+		m_PostProcessingComputePipeline = CreateRef<ComputePipeline>(pipelineSpec);
+
+		m_PostProcessingComputeDescriptorSet = pipelineSpec.Shader->AllocateDescriptorSet(m_DescriptorPool, 0);
+	}
+
+	{
 		AccelerationStructureSpecification spec;
 		spec.Mesh = m_Mesh;
 		spec.Transform = m_Transform;
@@ -63,7 +84,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 	{
 		ImageSpecification spec;
 		spec.DebugName = "RT-FinalImage";
-		spec.Format = ImageFormat::RGBA8;
+		spec.Format = ImageFormat::RGBA32F;
 		spec.Usage = ImageUsage::STORAGE_IMAGE_2D;
 		spec.Width = 1;
 		spec.Height = 1;
@@ -183,6 +204,40 @@ void RayTracingLayer::RayTracingPass()
 	m_SceneBuffer.FrameIndex++;
 }
 
+void RayTracingLayer::PostProcessingPass()
+{
+	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
+
+	{
+		std::array<VkWriteDescriptorSet, 2> writeDescriptors;
+		writeDescriptors[0] = m_PostProcessingComputePipeline->GetShader()->FindWriteDescriptorSet("u_OutputImage");
+		writeDescriptors[0].dstSet = m_PostProcessingComputeDescriptorSet;
+		writeDescriptors[0].pImageInfo = &m_PostProcessingImage->GetDescriptorImageInfo();
+
+		writeDescriptors[1] = m_PostProcessingComputePipeline->GetShader()->FindWriteDescriptorSet("u_InputImage");
+		writeDescriptors[1].dstSet = m_PostProcessingComputeDescriptorSet;
+		writeDescriptors[1].pImageInfo = &m_Image->GetDescriptorImageInfo();
+
+		vkUpdateDescriptorSets(device->GetLogicalDevice(), writeDescriptors.size(), writeDescriptors.data(), 0, NULL);
+	}
+
+	VkCommandBuffer commandBuffer = device->CreateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_PostProcessingComputePipeline->GetPipeline());
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_PostProcessingComputePipeline->GetPipelineLayout(), 0, 1, &m_PostProcessingComputeDescriptorSet, 0, nullptr);
+	vkCmdPushConstants(commandBuffer, m_PostProcessingComputePipeline->GetPipelineLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(float), &m_Exposure);
+
+	glm::ivec3 workGroups = {
+		(int)glm::ceil((float)m_PostProcessingImage->GetWidth() / 32.0f),
+		(int)glm::ceil((float)m_PostProcessingImage->GetHeight() / 32.0f),
+		1
+	};
+
+	vkCmdDispatch(commandBuffer, workGroups.x, workGroups.y, workGroups.z);
+
+	device->FlushCommandBuffer(commandBuffer, true);
+}
+
 bool RayTracingLayer::CreateRayTracingPipeline()
 {
 	RayTracingPipelineSpecification spec;
@@ -249,6 +304,7 @@ void RayTracingLayer::OnRender()
 	{
 		m_Image->Resize(m_ViewportPanel->GetSize().x, m_ViewportPanel->GetSize().y);
 		m_AccumulationImage->Resize(m_ViewportPanel->GetSize().x, m_ViewportPanel->GetSize().y);
+		m_PostProcessingImage->Resize(m_ViewportPanel->GetSize().x, m_ViewportPanel->GetSize().y);
 
 		m_SceneBuffer.FrameIndex = 1;
 	}
@@ -275,6 +331,7 @@ void RayTracingLayer::OnRender()
 	m_RenderCommandBuffer->Begin();
 
 	RayTracingPass();
+	PostProcessingPass();
 
 	m_RenderCommandBuffer->End();
 	m_RenderCommandBuffer->Submit();
@@ -282,7 +339,10 @@ void RayTracingLayer::OnRender()
 
 void RayTracingLayer::OnImGUIRender()
 {
-	m_ViewportPanel->Render(m_Image);
+	if (m_DoPostProcessing)
+		m_ViewportPanel->Render(m_PostProcessingImage);
+	else
+		m_ViewportPanel->Render(m_Image);
 
 	ImGui::Begin("Settings");
 
@@ -292,6 +352,9 @@ void RayTracingLayer::OnImGUIRender()
 			LOG_CRITICAL("Failed to create Ray Tracing pipeline!");
 	}
 
+	ImGui::SliderFloat("Exposure", &m_Exposure, 0.0f, 10.0f);
+
+	ImGui::Checkbox("Post-Processing", &m_DoPostProcessing);
 	ImGui::Checkbox("Accumulate", &m_Accumulate);
 
 	if (m_SelectedSubMeshIndex > -1)
@@ -319,6 +382,13 @@ void RayTracingLayer::OnImGUIRender()
 			m_AccelerationStructure->UpdateMaterialData();
 		}
 	}
+
+	ImGui::Separator();
+	ImGui::Text("Camera");
+	ImGui::Text("Position: %.3f, %.3f, %.3f", m_Camera->GetPosition().x, m_Camera->GetPosition().y, m_Camera->GetPosition().z);
+	ImGui::Text("Pitch/Yaw: %.3f, %.3f", m_Camera->GetPitchYaw().x, m_Camera->GetPitchYaw().y);
+	ImGui::Text("Focal Point: %.3f, %.3f, %.3f", m_Camera->GetFocalPoint().x, m_Camera->GetFocalPoint().y, m_Camera->GetFocalPoint().z);
+	ImGui::Text("Distance: %.3f", m_Camera->GetDistance());
 
 
 	ImGui::End();

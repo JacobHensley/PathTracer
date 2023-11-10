@@ -44,8 +44,8 @@ class RayTracingLayer : public Layer
 
 	private:
 		void RayTracingPass();
+		void PostProcessingPass();
 		bool CreateRayTracingPipeline();
-
 	private:
 		Ref<Mesh> m_Mesh;
 		glm::mat4 m_Transform;
@@ -63,6 +63,7 @@ class RayTracingLayer : public Layer
 		VkDescriptorSet m_RayTracingDescriptorSet = VK_NULL_HANDLE;
 		Ref<Image> m_Image;
 		Ref<Image> m_AccumulationImage;
+		Ref<Image> m_PostProcessingImage;
 		bool m_Accumulate = true;
 
 		SceneBuffer m_SceneBuffer;
@@ -72,8 +73,15 @@ class RayTracingLayer : public Layer
 		Ref<Shader> m_PreethamSkyComputeShader;
 		Ref<ComputePipeline> m_PreethamSkyComputePipeline;
 		VkDescriptorSet m_PreethamSkyComputeDescriptorSet = VK_NULL_HANDLE;
+
+		Ref<ComputePipeline> m_PostProcessingComputePipeline;
+		VkDescriptorSet m_PostProcessingComputeDescriptorSet = VK_NULL_HANDLE;
+
 		glm::vec3 m_SkyboxSettings = { 3.14f, 0.0f, 0.0f };
 		bool m_UpdateSkyBox = true;
+		bool m_DoPostProcessing = true;
+
+		float m_Exposure = 0.8f;
 
 		Ref<ViewportPanel> m_ViewportPanel;
 		int m_SelectedSubMeshIndex = -1;

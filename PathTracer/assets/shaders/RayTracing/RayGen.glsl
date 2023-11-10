@@ -126,7 +126,7 @@ vec3 TracePath(Ray ray, inout uint seed)
 		if (payload.Distance < 0.0)
 		{
 			// Miss, hit sky light
-			const vec3 skyColor = vec3(0.7, 0.75, 0.95) * 10.0;
+			const vec3 skyColor = vec3(0.7, 0.75, 0.95) * 1.0;
 			radiance += skyColor * throughput;
 
 // TODO: ENV MAP
