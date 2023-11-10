@@ -35,6 +35,16 @@ struct Material
 	int AlbedoMapIndex;				// 44
 	int MetallicRoughnessMapIndex;	// 48
 	int NormalMapIndex;				// 52
+
+	float Anisotropic;              // 56
+	float Subsurface;               // 60
+	float SpecularTint;             // 64
+	float Sheen;                    // 68
+	float SheenTint;                // 72
+	float Clearcoat;                // 76
+	float ClearcoatRoughness;       // 80
+	float SpecTrans;                // 84
+	float ior;                      // 88
 };
 
 Vertex UnpackVertex(uint vertexBufferIndex, uint index, uint vertexOffset)
@@ -102,7 +112,7 @@ Vertex InterpolateVertex(Vertex vertices[3], vec3 barycentrics)
 
 Material UnpackMaterial(uint materialIndex)
 {
-	const uint stride = 52;
+	const uint stride = 88;
 	const uint offset = materialIndex * (stride / 4);
 
 	Material material;
@@ -117,6 +127,16 @@ Material UnpackMaterial(uint materialIndex)
 	material.AlbedoMapIndex = floatBitsToInt(m_Materials.Data[offset + 10]);
 	material.MetallicRoughnessMapIndex = floatBitsToInt(m_Materials.Data[offset + 11]);
 	material.NormalMapIndex = floatBitsToInt(m_Materials.Data[offset + 12]);
+
+	material.Anisotropic = m_Materials.Data[offset + 13];
+	material.Subsurface = m_Materials.Data[offset + 14];
+	material.SpecularTint = m_Materials.Data[offset + 15];
+	material.Sheen = m_Materials.Data[offset + 16];
+	material.SheenTint = m_Materials.Data[offset + 17];
+	material.Clearcoat = m_Materials.Data[offset + 18];
+	material.ClearcoatRoughness = m_Materials.Data[offset + 19];
+	material.SpecTrans = m_Materials.Data[offset + 20];
+	material.ior = m_Materials.Data[offset + 21];
 
 	return material;
 }
@@ -189,15 +209,20 @@ void main()
 	g_RayPayload.Tangent			= normalize(mat3(gl_ObjectToWorldEXT) * vec3(vertex.Tangent.xyz));
 	g_RayPayload.View				= view;
 	g_RayPayload.WorldRayDirection	= gl_WorldRayDirectionEXT;
-
-	// NEW
-	g_RayPayload.Anisotropic = 0.0;
+  
+	g_RayPayload.Anisotropic = material.Anisotropic;       
+	g_RayPayload.Subsurface = material.Subsurface;        
+	g_RayPayload.SpecularTint = material.SpecularTint;      
+	g_RayPayload.Sheen = material.Sheen;             
+	g_RayPayload.SheenTint = material.SheenTint;         
+	g_RayPayload.Clearcoat = material.Clearcoat;         
+	g_RayPayload.ClearcoatRoughness = material.ClearcoatRoughness;
+	g_RayPayload.SpecTrans = material.SpecTrans;         
+	g_RayPayload.ior = material.ior;               
 
 	float aspect = sqrt(1.0 - g_RayPayload.Anisotropic * 0.9);
     g_RayPayload.ax = max(0.001, g_RayPayload.Roughness / aspect);
     g_RayPayload.ay = max(0.001, g_RayPayload.Roughness * aspect);
-
-	g_RayPayload.ior = 1.0;
 	g_RayPayload.eta = dot(view, worldNormal) < 0.0 ? (1.0 / g_RayPayload.ior ) : g_RayPayload.ior;
 
 	// gl_InstanceCustomIndexEXT: Cornell Box

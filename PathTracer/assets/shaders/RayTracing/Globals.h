@@ -20,20 +20,18 @@ struct Payload
 	vec3 View;
 	vec3 WorldRayDirection;
 
-	// NEW STUFF TO IMPLEMENT
-	float Anisotropic;
-	float Subsurface;
-	float SpecularTint;
-	float Sheen;
-	float SheenTint;
-	float Clearcoat;
+	float Anisotropic;       
+	float Subsurface;        
+	float SpecularTint;      
+	float Sheen;             
+	float SheenTint;         
+	float Clearcoat;         
 	float ClearcoatRoughness;
-	float SpecTrans;
-	float ior;
+	float SpecTrans;         
+	float ior;               
+
 	float ax;
 	float ay;
-
-	// From State
 	float eta;
 };
 

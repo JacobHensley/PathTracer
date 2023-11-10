@@ -4,7 +4,6 @@
 #include "Input/KeyCodes.h"
 #include "ImGui/imgui.h"
 #include "ImGui/imgui_impl_vulkan.h"
-
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -13,12 +12,12 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
-	//m_Mesh = CreateRef<Mesh>("assets/models/Suzanne/glTF/Suzanne.gltf");
-	m_Mesh = CreateRef<Mesh>("assets/models/Sponza/glTF/Sponza.gltf");
-	//m_Mesh = CreateRef<Mesh>("assets/models/CornellBox.gltf");
+	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Suzanne/glTF/Suzanne.gltf"));
+	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Sponza/glTF/Sponza.gltf"));
+	m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/CornellBox.gltf"));
 
-	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
-	//m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+	//m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
 
 	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
@@ -365,15 +364,34 @@ void RayTracingLayer::OnImGUIRender()
 		MaterialBuffer& materialBuffer = m_Mesh->GetMaterialBuffers()[materialIndex];
 		bool updated = false;
 
-		if (ImGui::ColorEdit3("Albdeo", glm::value_ptr(materialBuffer.AlbedoValue)))
+		if (ImGui::ColorEdit3("Albdeo", glm::value_ptr(materialBuffer.data.AlbedoValue)))
 			updated = true;
-		if (ImGui::DragFloat("Metallic", &materialBuffer.MetallicValue, 0.01f, 0.0f, 1.0f))
+		if (ImGui::DragFloat("Metallic", &materialBuffer.data.MetallicValue, 0.01f, 0.0f, 1.0f))
 			updated = true;
-		if (ImGui::DragFloat("Roughness", &materialBuffer.RoughnessValue, 0.01f, 0.0f, 1.0f))
+		if (ImGui::DragFloat("Roughness", &materialBuffer.data.RoughnessValue, 0.01f, 0.0f, 1.0f))
 			updated = true;
-		if (ImGui::ColorEdit3("Emissive Color", glm::value_ptr(materialBuffer.EmissiveValue)))
+		if (ImGui::ColorEdit3("Emissive Color", glm::value_ptr(materialBuffer.data.EmissiveValue)))
 			updated = true;
-		if (ImGui::DragFloat("Emissive Strength", &materialBuffer.EmissiveStrength, 0.1f, 0.0f, 10.0f))
+		if (ImGui::DragFloat("Emissive Strength", &materialBuffer.data.EmissiveStrength, 0.1f, 0.0f, 10.0f))
+			updated = true;
+
+		if (ImGui::DragFloat("Anisotropic", &materialBuffer.Anisotropic, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::DragFloat("Subsurface", &materialBuffer.Subsurface, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::DragFloat("SpecularTint", &materialBuffer.SpecularTint, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::DragFloat("Sheen", &materialBuffer.Sheen, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::DragFloat("SheenTint", &materialBuffer.SheenTint, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::DragFloat("Clearcoat", &materialBuffer.Clearcoat, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::DragFloat("ClearcoatRoughness", &materialBuffer.ClearcoatRoughness, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::DragFloat("SpecTrans", &materialBuffer.SpecTrans, 0.01f, 0.0f, 1.0f))
+			updated = true;
+		if (ImGui::DragFloat("ior", &materialBuffer.ior, 0.01f, 0.0f, 2.0f))
 			updated = true;
 
 		if (updated)

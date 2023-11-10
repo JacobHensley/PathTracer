@@ -16,4 +16,14 @@ void main()
 	g_RayPayload.WorldNormal = vec3(0.0);
 	g_RayPayload.WorldNormalMatrix = mat3(0.0);
 	g_RayPayload.View = vec3(0.0);
+
+	g_RayPayload.Anisotropic = 0.0;
+	g_RayPayload.Subsurface = 0.0;
+	g_RayPayload.SpecularTint = 0.0;
+	g_RayPayload.Sheen = 0.0;
+	g_RayPayload.SheenTint = 0.0;
+	g_RayPayload.Clearcoat = 0.0;
+	g_RayPayload.ClearcoatRoughness = 0.0;
+	g_RayPayload.SpecTrans = 0.0;
+	g_RayPayload.ior = 1.5;
 }
