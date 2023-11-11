@@ -1,13 +1,16 @@
 #pragma once
 #include "Core/Layer.h"
+
 #include "Graphics/Mesh.h"
 #include "Graphics/Camera.h"
 #include "Graphics/Image.h"
+#include "Graphics/Texture.h"
 #include "Graphics/VulkanBuffers.h"
 #include "Graphics/RenderCommandBuffer.h"
 #include "Graphics/AccelerationStructure.h"
 #include "Graphics/RayTracingPipeline.h"
 #include "Graphics/ComputePipeline.h"
+
 #include "ImGui/Panels/ViewportPanel.h"
 #include <vulkan/vulkan.h>
 
@@ -69,7 +72,9 @@ class RayTracingLayer : public Layer
 		SceneBuffer m_SceneBuffer;
 		Ref<UniformBuffer> m_SceneUniformBuffer;
 
-		Ref<Image> m_Skybox;
+		Ref<TextureCube> m_RadianceMap;
+
+		Ref<Image> m_PreethamSkybox;
 		Ref<Shader> m_PreethamSkyComputeShader;
 		Ref<ComputePipeline> m_PreethamSkyComputePipeline;
 		VkDescriptorSet m_PreethamSkyComputeDescriptorSet = VK_NULL_HANDLE;
@@ -84,5 +89,6 @@ class RayTracingLayer : public Layer
 		float m_Exposure = 0.8f;
 
 		Ref<ViewportPanel> m_ViewportPanel;
+
 		int m_SelectedSubMeshIndex = -1;
 };

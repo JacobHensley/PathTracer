@@ -13,11 +13,11 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Suzanne/glTF/Suzanne.gltf"));
-	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Sponza/glTF/Sponza.gltf"));
-	m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/CornellBox.gltf"));
+	m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Sponza/glTF/Sponza.gltf"));
+	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/CornellBox.gltf"));
 
-	//m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
-	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+	//m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
 
 	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
@@ -33,6 +33,12 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 
 	m_ViewportPanel = CreateRef<ViewportPanel>();
 
+	{
+		TextureCubeSpecification spec;
+		spec.path = "assets/hdr/graveyard_pathways_4k.hdr";
+		m_RadianceMap = CreateRef<TextureCube>(spec);
+	}
+	
 	// Preetham Sky
 	{
 		ImageSpecification skyboxSpec;
@@ -40,7 +46,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 		skyboxSpec.Height = 2048;
 		skyboxSpec.Format = ImageFormat::RGBA32F;
 		skyboxSpec.Usage = ImageUsage::STORAGE_IMAGE_CUBE;
-		m_Skybox = CreateRef<Image>(skyboxSpec);
+		m_PreethamSkybox = CreateRef<Image>(skyboxSpec);
 
 		m_PreethamSkyComputeShader = CreateRef<Shader>("assets/shaders/PreethamSky.glsl");
 
@@ -52,7 +58,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 
 		VkWriteDescriptorSet writeDescriptor = m_PreethamSkyComputeShader->FindWriteDescriptorSet("u_CubeMap");
 		writeDescriptor.dstSet = m_PreethamSkyComputeDescriptorSet;
-		writeDescriptor.pImageInfo = &m_Skybox->GetDescriptorImageInfo();
+		writeDescriptor.pImageInfo = &m_PreethamSkybox->GetDescriptorImageInfo();
 
 		vkUpdateDescriptorSets(device->GetLogicalDevice(), 1, &writeDescriptor, 0, NULL);
 	}
@@ -176,7 +182,7 @@ void RayTracingLayer::RayTracingPass()
 		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6, &submeshDataStorageBuffer->GetDescriptorBufferInfo()),
 		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 7, &m_SceneUniformBuffer->GetDescriptorBufferInfo()),
 		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8, &m_AccelerationStructure->GetMaterialBuffer()->GetDescriptorBufferInfo()),
-		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10, &m_Skybox->GetDescriptorImageInfo()),
+		VkTools::WriteDescriptorSet(m_RayTracingDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10, &m_RadianceMap->GetDescriptorImageInfo()),
 	};
 
 	if (textureImageInfos.size() > 0)

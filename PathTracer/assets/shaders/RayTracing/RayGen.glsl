@@ -126,28 +126,10 @@ vec3 TracePath(Ray ray, inout uint seed)
 		if (payload.Distance < 0.0)
 		{
 			// Miss, hit sky light
-			const vec3 skyColor = vec3(0.7, 0.75, 0.95) * 1.0;
+			vec3 skyColor = vec3(0.7, 0.75, 0.95) * 1.0;
+			skyColor = texture(u_Skybox, ray.Direction).rgb * 10.0;
 			radiance += skyColor * throughput;
-
-// TODO: ENV MAP
-#ifdef OPT_ENVMAP
-                vec4 envMapColPdf = EvalEnvMap(r);
-
-                float misWeight = 1.0;
-
-                // Gather radiance from envmap and use scatterSample.pdf from previous bounce for MIS
-                if (state.depth > 0)
-                    misWeight = PowerHeuristic(scatterSample.pdf, envMapColPdf.w);
-
-			#if defined(OPT_MEDIUM) && !defined(OPT_VOL_MIS)
-                if(!surfaceScatter)
-                    misWeight = 1.0f;
-			#endif
-
-                if(misWeight > 0)
-                    radiance += misWeight * envMapColPdf.rgb * throughput * envMapIntensity;
-#endif
-             break;
+            break;
         }
 
 		radiance += payload.Emission * throughput;
