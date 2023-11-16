@@ -32,13 +32,12 @@ project "PathTracer"
 		"%{prj.name}/src/**.h",
 	}
 
-	-- Exclude example layer files
-	removefiles 
-	{ 
-		"%{prj.name}/src/AppLayer.cpp",
-		"%{prj.name}/src/AppLayer.h",
+	includedirs
+	{
+		"C:/Program Files/NVIDIA Corporation/NVIDIA Texture Tools/include"
 	}
-	
+
+
 	links
 	{
 		"VulkanLibrary",

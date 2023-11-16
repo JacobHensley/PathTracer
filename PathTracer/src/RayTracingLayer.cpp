@@ -14,6 +14,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Suzanne/glTF/Suzanne.gltf"));
 	m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Sponza/glTF/Sponza.gltf"));
+	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Intel_Sponza/NewSponza_Main_glTF_002.gltf"));
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/CornellBox.gltf"));
 
 	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));

@@ -1,6 +1,5 @@
 #pragma once
 #include "Core/Layer.h"
-
 #include "Graphics/Mesh.h"
 #include "Graphics/Camera.h"
 #include "Graphics/Image.h"
@@ -10,7 +9,6 @@
 #include "Graphics/AccelerationStructure.h"
 #include "Graphics/RayTracingPipeline.h"
 #include "Graphics/ComputePipeline.h"
-
 #include "ImGui/Panels/ViewportPanel.h"
 #include <vulkan/vulkan.h>
 
