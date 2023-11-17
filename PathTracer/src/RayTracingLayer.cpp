@@ -12,9 +12,16 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
+	{
+		Texture2DSpecification spec;
+		spec.path = "assets/textures/CompressionTest.jpg";
+		spec.compress = true;
+		m_CompressedTexture = CreateRef<Texture2D>(spec);
+	}
+
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Suzanne/glTF/Suzanne.gltf"));
-	m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Sponza/glTF/Sponza.gltf"));
-	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Intel_Sponza/NewSponza_Main_glTF_002.gltf"));
+	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Sponza/glTF/Sponza.gltf"));
+	m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Intel_Sponza/NewSponza_Main_glTF_002.gltf"));
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/CornellBox.gltf"));
 
 	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
@@ -349,6 +356,8 @@ void RayTracingLayer::OnImGUIRender()
 		m_ViewportPanel->Render(m_PostProcessingImage);
 	else
 		m_ViewportPanel->Render(m_Image);
+	
+	//m_ViewportPanel->Render(m_CompressedTexture->GetImage());
 
 	ImGui::Begin("Settings");
 
@@ -362,6 +371,16 @@ void RayTracingLayer::OnImGUIRender()
 
 	ImGui::Checkbox("Post-Processing", &m_DoPostProcessing);
 	ImGui::Checkbox("Accumulate", &m_Accumulate);
+
+	{
+		// Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
+		// 
+		// const VkDescriptorImageInfo& descriptorInfo = m_CompressedTexture->GetImage()->GetDescriptorImageInfo();
+		// VkWriteDescriptorSet writeDescriptor = VkTools::WriteDescriptorSet(m_ImageDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &descriptorInfo);
+		// vkUpdateDescriptorSets(device->GetLogicalDevice(), 1, &writeDescriptor, 0, nullptr);
+		// 
+		// ImGui::Image(m_ImageDescriptorSet, ImVec2(size.x, size.y), ImVec2::ImVec2(0, 1), ImVec2::ImVec2(1, 0));
+	}
 
 	if (m_SelectedSubMeshIndex > -1)
 	{
