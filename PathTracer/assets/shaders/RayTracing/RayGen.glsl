@@ -30,6 +30,7 @@ layout(binding = 3) uniform CameraBuffer
 layout(binding = 7) uniform SceneBuffer
 {
 	uint FrameIndex;
+	vec3 AbsorptionFactor;
 } u_SceneData;
 
 layout(location = 0) rayPayloadEXT Payload g_RayPayload;
@@ -171,6 +172,49 @@ vec3 TracePath(Ray ray, inout uint seed)
 	return radiance;
 }
 
+vec3 TraceCloudPath(Ray ray, inout uint seed)
+{
+	uint flags = gl_RayFlagsOpaqueEXT;
+	uint mask = 0xff;
+
+	const int MAX_BOUNCES = 2;
+
+	vec3 radiance = vec3(0.0);
+	vec3 throughput = vec3(1.0);
+
+	for (int bounceIndex = 0; bounceIndex < MAX_BOUNCES; bounceIndex++)
+	{
+		traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, ray.Origin, ray.TMin, ray.Direction, ray.TMax, 0);
+		Payload hitPayload = g_RayPayload;
+
+		// MISS
+		if (hitPayload.Distance < 0.0)
+		{
+			vec3 skyColor = texture(u_Skybox, ray.Direction).rgb * 1.0;
+			radiance += skyColor * throughput;
+            break;
+        }
+
+		vec3 fhp = ray.Origin + ray.Direction * hitPayload.Distance;
+        ray.Origin = fhp + ray.Direction * 0.0003;
+
+		traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, ray.Origin, ray.TMin, ray.Direction, ray.TMax, 0);
+		Payload exitPayload = g_RayPayload;
+
+		vec3 shp = ray.Origin + ray.Direction * exitPayload.Distance;
+		float distanceInObject = distance(fhp, shp);
+
+		float absorption = exp(u_SceneData.AbsorptionFactor.x * -distanceInObject);
+		absorption = max(absorption, 0.25);
+		throughput = (absorption) * vec3(hitPayload.Albedo);
+
+		vec3 thp = ray.Origin + ray.Direction * exitPayload.Distance;
+		ray.Origin = thp + ray.Direction * 0.0003;
+	}
+
+	return radiance;
+}
+
 void main()
 {
 	uint seed = gl_LaunchIDEXT.x + gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x;
@@ -200,7 +244,7 @@ void main()
 		ray.TMin = 0.00001;
 		ray.TMax = 1e27f;
 
-		color += TracePath(ray, seed);
+		color += TraceCloudPath(ray, seed);
 	}
 
 	float numPaths = SAMPLE_COUNT;

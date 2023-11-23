@@ -86,3 +86,4 @@ bld/
 
 # Excludes
 !/vendor/premake/premake5.exe
+PathTracer/assets/models/Intel_Sponza

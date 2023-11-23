@@ -26,6 +26,10 @@ struct CameraBuffer
 struct SceneBuffer
 {
 	uint32_t FrameIndex;
+	float padding0;
+	float padding1;
+	float padding2;
+	glm::vec3 AbsorptionFactor;
 };
 
 class RayTracingLayer : public Layer
@@ -89,6 +93,4 @@ class RayTracingLayer : public Layer
 		Ref<ViewportPanel> m_ViewportPanel;
 
 		int m_SelectedSubMeshIndex = -1;
-
-		Ref<Texture2D> m_CompressedTexture;
 };
