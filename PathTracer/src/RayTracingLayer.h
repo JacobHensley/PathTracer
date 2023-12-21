@@ -93,4 +93,6 @@ class RayTracingLayer : public Layer
 		Ref<ViewportPanel> m_ViewportPanel;
 
 		int m_SelectedSubMeshIndex = -1;
+
+		Ref<Image> m_NoiseTexture;
 };

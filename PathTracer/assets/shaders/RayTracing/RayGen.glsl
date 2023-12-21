@@ -9,6 +9,7 @@ layout(binding = 0) uniform accelerationStructureEXT u_TopLevelAS;
 layout (binding = 1, rgba8) uniform image2D o_Image;
 layout (binding = 2, rgba32f) uniform image2D o_AccumulationImage;
 layout (binding = 10) uniform samplerCube u_Skybox;
+layout (binding = 11) uniform sampler3D u_NoiseTexture;
 
 struct Ray
 {
@@ -107,7 +108,7 @@ vec3 TracePath(Ray ray, inout uint seed)
 	uint flags = gl_RayFlagsOpaqueEXT;
 	uint mask = 0xff;
 
-	const int MAX_BOUNCES = 5;
+	const int MAX_BOUNCES = 20;
 
 	vec3 radiance = vec3(0.0);
 	vec3 throughput = vec3(1.0);
@@ -176,40 +177,82 @@ vec3 TraceCloudPath(Ray ray, inout uint seed)
 {
 	uint flags = gl_RayFlagsOpaqueEXT;
 	uint mask = 0xff;
-
+	 
 	const int MAX_BOUNCES = 2;
 
 	vec3 radiance = vec3(0.0);
 	vec3 throughput = vec3(1.0);
+	vec3 lightPos = vec3(0.0, 1.0, 0.0);
 
 	for (int bounceIndex = 0; bounceIndex < MAX_BOUNCES; bounceIndex++)
 	{
 		traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, ray.Origin, ray.TMin, ray.Direction, ray.TMax, 0);
-		Payload hitPayload = g_RayPayload;
+		Payload firstHitPayload = g_RayPayload;
+		Ray firstHitRay = ray;
 
-		// MISS
-		if (hitPayload.Distance < 0.0)
+		if (firstHitPayload.Distance < 0.0)
 		{
-			vec3 skyColor = texture(u_Skybox, ray.Direction).rgb * 1.0;
+			vec3 skyColor = texture(u_Skybox, ray.Direction).rgb;
 			radiance += skyColor * throughput;
             break;
         }
 
-		vec3 fhp = ray.Origin + ray.Direction * hitPayload.Distance;
-        ray.Origin = fhp + ray.Direction * 0.0003;
+		vec3 firstHitPoint = firstHitRay.Origin + firstHitRay.Direction * firstHitPayload.Distance;
+
+		ray.Origin = firstHitPoint + firstHitRay.Direction * 0.0003;
 
 		traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, ray.Origin, ray.TMin, ray.Direction, ray.TMax, 0);
-		Payload exitPayload = g_RayPayload;
+		Payload secondHitPayload = g_RayPayload;
+		Ray secondHitRay = ray;
 
-		vec3 shp = ray.Origin + ray.Direction * exitPayload.Distance;
-		float distanceInObject = distance(fhp, shp);
+		if (secondHitPayload.Distance < 0.0)
+		{
+			continue;
+		}
 
-		float absorption = exp(u_SceneData.AbsorptionFactor.x * -distanceInObject);
-		absorption = max(absorption, 0.25);
-		throughput = (absorption) * vec3(hitPayload.Albedo);
+		vec3 secondHitPoint = secondHitRay.Origin + secondHitRay.Direction * secondHitPayload.Distance;
 
-		vec3 thp = ray.Origin + ray.Direction * exitPayload.Distance;
-		ray.Origin = thp + ray.Direction * 0.0003;
+		float distanceInObject = distance(firstHitPoint, secondHitPoint);
+
+		int sampleCount = 10;
+		float totalDensity = 0.0;
+		int lightSampleCount = 5;
+		vec3 totalLight = vec3(1.0);
+		for (int i = 0;i < sampleCount;i++)
+		{
+			float sampleDistance = distanceInObject / sampleCount;
+			vec3 samplePoint = firstHitPoint + firstHitRay.Direction * sampleDistance * i;
+			float density = texture(u_NoiseTexture, samplePoint).x;
+			
+			Ray lightRay;
+			lightRay.Origin = samplePoint;
+			lightRay.Direction = samplePoint - lightPos;
+
+			traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, lightRay.Origin, lightRay.TMin, lightRay.Direction, lightRay.TMax, 0);
+			Payload lightPayload = g_RayPayload;
+
+			float totalDensityL = 0.0;
+			for (int j = 0;j < lightSampleCount;j++)
+			{
+				float lightSampleDistance = lightPayload.Distance / lightSampleCount;
+				vec3 lightSamplePoint = samplePoint + lightRay.Direction * lightSampleDistance * j;
+				float densityL = texture(u_NoiseTexture, lightSamplePoint).x;
+				if (densityL < u_SceneData.AbsorptionFactor.y)
+					totalDensityL += densityL * lightSampleDistance;
+			}
+
+			vec3 transmittanceL = vec3(exp(-totalDensityL));
+			totalLight *= transmittanceL;
+			radiance += transmittanceL;
+
+			if (density > u_SceneData.AbsorptionFactor.y)
+				totalDensity += density * sampleDistance;
+		}
+
+		vec3 transmittance = 1.0 - vec3(exp(-totalDensity * u_SceneData.AbsorptionFactor.x));
+		radiance += (transmittance);
+
+		ray.Origin = secondHitPoint + secondHitRay.Direction * 0.0003;
 	}
 
 	return radiance;
@@ -234,6 +277,9 @@ void main()
 
 		vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
  		vec2 d = inUV * 2.0 - 1.0;
+
+		//vec3 density = texture(u_NoiseTexture, vec3(u_SceneData.FrameIndex / 10000, inUV)).xyz;
+		//imageStore(o_Image, ivec2(gl_LaunchIDEXT.xy), vec4(density, 1));
 
 		vec4 target = u_CameraBuffer.InverseProjection * vec4(d.x, d.y, 1, 1);
 		vec4 direction = u_CameraBuffer.InverseView * vec4(normalize(target.xyz / target.w), 0);

@@ -15,7 +15,8 @@ workspace "PathTracer"
 
 	outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
-	include "VulkanLibrary"
+	target = "bin/" .. outputdir .. "/PathTracer"
+	include "VulkanLibrary"	
 
 project "PathTracer"
 	location "PathTracer"
@@ -23,7 +24,7 @@ project "PathTracer"
 	language "C++"
 	staticruntime "on"
 
-	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	targetdir (target)
 	objdir ("bin/intermediates/" .. outputdir .. "/%{prj.name}")
 
 	files
@@ -34,16 +35,16 @@ project "PathTracer"
 
 	includedirs
 	{
-		"C:/Program Files/NVIDIA Corporation/NVIDIA Texture Tools/include"
+		"PathTracer/vendor/FastNoise2/include",
 	}
-
 
 	links
 	{
 		"VulkanLibrary",
+		"PathTracer/vendor/FastNoise2/lib/FastNoise.lib",
 	}
 
-	VulkanLibraryIncludeDirectories("VulkanLibrary");
+	VulkanLibraryIncludeDirectories("VulkanLibrary")
 
 	filter "system:windows"
 		cppdialect "C++17"
