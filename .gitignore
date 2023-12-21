@@ -87,3 +87,4 @@ bld/
 # Excludes
 !/vendor/premake/premake5.exe
 PathTracer/assets/models/Intel_Sponza
+!PathTracer/vendor/FastNoise2/bin

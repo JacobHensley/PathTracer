@@ -226,7 +226,7 @@ vec3 TraceCloudPath(Ray ray, inout uint seed)
 			
 			Ray lightRay;
 			lightRay.Origin = samplePoint;
-			lightRay.Direction = samplePoint - lightPos;
+			lightRay.Direction = lightPos - samplePoint;
 
 			traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, lightRay.Origin, lightRay.TMin, lightRay.Direction, lightRay.TMax, 0);
 			Payload lightPayload = g_RayPayload;
@@ -237,13 +237,13 @@ vec3 TraceCloudPath(Ray ray, inout uint seed)
 				float lightSampleDistance = lightPayload.Distance / lightSampleCount;
 				vec3 lightSamplePoint = samplePoint + lightRay.Direction * lightSampleDistance * j;
 				float densityL = texture(u_NoiseTexture, lightSamplePoint).x;
-				if (densityL < u_SceneData.AbsorptionFactor.y)
-					totalDensityL += densityL * lightSampleDistance;
+			//	if (densityL < u_SceneData.AbsorptionFactor.y)
+			//		totalDensityL += densityL * lightSampleDistance;
 			}
 
 			vec3 transmittanceL = vec3(exp(-totalDensityL));
 			totalLight *= transmittanceL;
-			radiance += transmittanceL;
+			//radiance += transmittanceL;
 
 			if (density > u_SceneData.AbsorptionFactor.y)
 				totalDensity += density * sampleDistance;
