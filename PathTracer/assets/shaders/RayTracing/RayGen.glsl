@@ -173,6 +173,16 @@ vec3 TracePath(Ray ray, inout uint seed)
 	return radiance;
 }
 
+Ray CreateRay(vec3 origin, vec3 direction)
+{
+	Ray ray;
+	ray.Origin = origin;
+	ray.Direction = direction;
+	ray.TMin = 0.00001;
+	ray.TMax = 1e27f;
+	return ray;
+}
+
 vec3 TraceCloudPath(Ray ray, inout uint seed)
 {
 	uint flags = gl_RayFlagsOpaqueEXT;
@@ -182,7 +192,18 @@ vec3 TraceCloudPath(Ray ray, inout uint seed)
 
 	vec3 radiance = vec3(0.0);
 	vec3 throughput = vec3(1.0);
-	vec3 lightPos = vec3(0.0, 1.0, 0.0);
+	vec3 lightPos = vec3(5.0, 0.0, 0.0);
+
+	float totalLightDensity = 0.0;
+
+	// Clouds
+	vec3 lightEnergy = vec3(0.0);
+	float genTransmittance = 1.0;
+	vec3 bgColor = vec3(0.0);
+
+	float var = 0.0;
+
+	float newDistance = 0.0;
 
 	for (int bounceIndex = 0; bounceIndex < MAX_BOUNCES; bounceIndex++)
 	{
@@ -194,6 +215,7 @@ vec3 TraceCloudPath(Ray ray, inout uint seed)
 		{
 			vec3 skyColor = texture(u_Skybox, ray.Direction).rgb;
 			radiance += skyColor * throughput;
+			bgColor = skyColor * throughput;
             break;
         }
 
@@ -207,6 +229,7 @@ vec3 TraceCloudPath(Ray ray, inout uint seed)
 
 		if (secondHitPayload.Distance < 0.0)
 		{
+			radiance = vec3(1, 0, 0);
 			continue;
 		}
 
@@ -214,48 +237,74 @@ vec3 TraceCloudPath(Ray ray, inout uint seed)
 
 		float distanceInObject = distance(firstHitPoint, secondHitPoint);
 
-		int sampleCount = 10;
+		int sampleCount = 100;
 		float totalDensity = 0.0;
 		int lightSampleCount = 5;
 		vec3 totalLight = vec3(1.0);
+		float sampleDistance = distanceInObject / float(sampleCount);
+		var = sampleDistance;
+
+		float sampleScale = 0.01;
+
 		for (int i = 0;i < sampleCount;i++)
 		{
-			float sampleDistance = distanceInObject / sampleCount;
-			vec3 samplePoint = firstHitPoint + firstHitRay.Direction * sampleDistance * i;
-			float density = texture(u_NoiseTexture, samplePoint).x;
-			
-			Ray lightRay;
-			lightRay.Origin = samplePoint;
-			lightRay.Direction = lightPos - samplePoint;
+			vec3 samplePoint = firstHitPoint + firstHitRay.Direction * i * sampleScale;
 
+			if (distance(firstHitPoint, samplePoint) > distanceInObject)
+			{
+				break;
+			}
+
+			const float noiseScale = 0.2;
+			float density = texture(u_NoiseTexture, samplePoint * noiseScale).x;
+
+			newDistance += sampleScale * density;
+
+			Ray lightRay = CreateRay(samplePoint, normalize(lightPos - samplePoint));
 			traceRayEXT(u_TopLevelAS, flags, mask, 0, 0, 0, lightRay.Origin, lightRay.TMin, lightRay.Direction, lightRay.TMax, 0);
 			Payload lightPayload = g_RayPayload;
 
+			float lightSampleDistance = lightPayload.Distance / lightSampleCount;
+
 			float totalDensityL = 0.0;
-			for (int j = 0;j < lightSampleCount;j++)
+			for (int j = 0; j < lightSampleCount;j++)
 			{
-				float lightSampleDistance = lightPayload.Distance / lightSampleCount;
 				vec3 lightSamplePoint = samplePoint + lightRay.Direction * lightSampleDistance * j;
 				float densityL = texture(u_NoiseTexture, lightSamplePoint).x;
-			//	if (densityL < u_SceneData.AbsorptionFactor.y)
-			//		totalDensityL += densityL * lightSampleDistance;
+				if (densityL < u_SceneData.AbsorptionFactor.y)
+					totalDensityL += densityL * lightSampleDistance;
 			}
 
-			vec3 transmittanceL = vec3(exp(-totalDensityL));
-			totalLight *= transmittanceL;
-			//radiance += transmittanceL;
 
-			if (density > u_SceneData.AbsorptionFactor.y)
+			const float lightAbsorptionTowardSun = 0.5;
+			const float darknessThreshold = 0.0;
+			float transmittanceL = exp(-totalDensityL * lightAbsorptionTowardSun);
+			transmittanceL = darknessThreshold + transmittanceL * (1.0 - darknessThreshold);
+			// totalLight *= transmittanceL;
+			// radiance *= transmittanceL;
+			// totalLightDensity = transmittanceL.x;
+
+
+			//if (density > u_SceneData.AbsorptionFactor.y)
+			{
 				totalDensity += density * sampleDistance;
+
+				lightEnergy += density * sampleDistance * genTransmittance * transmittanceL;
+				genTransmittance *= exp(-density * sampleDistance * u_SceneData.AbsorptionFactor.x);
+			}
 		}
 
 		vec3 transmittance = 1.0 - vec3(exp(-totalDensity * u_SceneData.AbsorptionFactor.x));
-		radiance += (transmittance);
+		//radiance += (transmittance);
 
 		ray.Origin = secondHitPoint + secondHitRay.Direction * 0.0003;
 	}
+	
+	//radiance = bgColor * (genTransmittance + lightEnergy);
+	radiance = vec3(genTransmittance);
 
-	return radiance;
+	//return radiance;
+	return vec3(exp(-newDistance * u_SceneData.AbsorptionFactor.x));
 }
 
 void main()
