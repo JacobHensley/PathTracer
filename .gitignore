@@ -84,7 +84,9 @@ bld/
 *.vspx
 *.sap
 
+*.bc7
+
 # Excludes
 !/vendor/premake/premake5.exe
-PathTracer/assets/models/Intel_Sponza
+PathTracer/assets/models/IntelSponza
 !PathTracer/vendor/FastNoise2/bin

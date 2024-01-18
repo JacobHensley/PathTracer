@@ -15,12 +15,12 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
 
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Suzanne/glTF/Suzanne.gltf"));
-	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Sponza/glTF/Sponza.gltf"));
+	//m_Mesh = CreateRef<Mesh>(CreateRef<MeshSource>("assets/models/Sponza/glTF/Sponza.gltf"));
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/CornellBox.gltf"));
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Cube.gltf"));
 	m_Mesh = CreateRef<Mesh>(CreateRef<MeshSource>("assets/models/IntelSponza/NewSponza_Main_glTF_002.gltf"));
-	//m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
-	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+	//m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
 
 	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
@@ -465,6 +465,16 @@ void RayTracingLayer::OnImGUIRender()
 			updated = true;
 		if (ImGui::DragFloat("ior", &materialBuffer.ior, 0.01f, 0.0f, 2.0f))
 			updated = true;
+
+		const glm::mat4& matrix = m_Mesh->GetSubMeshes()[m_SelectedSubMeshIndex].WorldTransform;
+		glm::vec4 a = matrix[0];
+		glm::vec4 b = matrix[1];
+		glm::vec4 c = matrix[2];
+		glm::vec4 d = matrix[3];
+		ImGui::Text("%.2f %.2f %.2f %.2f", a.x, a.y, a.z, a.w);
+		ImGui::Text("%.2f %.2f %.2f %.2f", b.x, b.y, b.z, b.w);
+		ImGui::Text("%.2f %.2f %.2f %.2f", c.x, c.y, c.z, c.w);
+		ImGui::Text("%.2f %.2f %.2f %.2f", d.x, d.y, d.z, d.w);
 
 		if (updated)
 		{
