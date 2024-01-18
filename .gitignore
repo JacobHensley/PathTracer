@@ -85,6 +85,7 @@ bld/
 *.sap
 
 *.bc7
+*.noise
 
 # Excludes
 !/vendor/premake/premake5.exe
