@@ -16,10 +16,9 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Suzanne/glTF/Suzanne.gltf"));
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Sponza/glTF/Sponza.gltf"));
-	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Intel_Sponza/NewSponza_Main_glTF_002.gltf"));
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/CornellBox.gltf"));
-	m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Cube.gltf"));
-
+	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Cube.gltf"));
+	m_Mesh = CreateRef<Mesh>(CreateRef<MeshSource>("assets/models/IntelSponza/NewSponza_Main_glTF_002.gltf"));
 	//m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
 	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
 
@@ -120,30 +119,46 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 		uint32_t width = 512;
 		uint32_t height = 512;
 		uint32_t depth = 512;
+		uint64_t noiseSize = width * height * depth * 4;
+		uint8_t* data = new uint8_t[noiseSize];
 
-		//FastNoise::SmartNode<> gen = FastNoise::New<FastNoise::Checkerboard>();
-		FastNoise::SmartNode<> gen = FastNoise::NewFromEncodedNodeTree("FwDsUTg+rkdhPwAAAAAAAIA/GQAbABkAGQAbABcAAAAAAAAAgD8AAIA/KVyPvxMACtcjPQsAAQAAAAAAAAABAAAAAAAAAAAAAIA/AAAAAD4BGwAXAAAAAAAAAIA/AACAPylcj78TAI/CdbwLAAEAAAAAAAAAAQAAAAAAAAAAAACAPwAAAIA+ARsAFwAAAAAAAACAPwAAgD97FK6+FQBxPapAj8K1QDMzc0ATAI/CdTwLAAEAAAAAAAAAAQAAAAAAAAAAAACAPwAAACA/AJqZGT8BGwAZAA0ABAAAAAAAAEATAArXozwHAAAAAAA/AI/C9T0AzczMPgDNzMw+");
-	
-		std::vector<float> noiseOutput(width * height * depth);
-		FastNoise::OutputMinMax o = gen->GenUniformGrid3D(noiseOutput.data(), 0, 0, 0, width, height, depth, 1.0f, 1337);
-		//FastNoise::OutputMinMax bounds = gen->GenUniformGrid2D(noiseOutput.data(), 0, 0, width, height, 0.02f, 1337);
+		const char* filepath = "Cloud.noise";
+		if (std::filesystem::exists(filepath))
+		{
+			std::ifstream stream(filepath, std::ios::binary);
+			stream.read((char*)data, noiseSize);
+			stream.close();
+		}
+		else
+		{
+			//FastNoise::SmartNode<> gen = FastNoise::New<FastNoise::Checkerboard>();
+			FastNoise::SmartNode<> gen = FastNoise::NewFromEncodedNodeTree("FwDsUTg+rkdhPwAAAAAAAIA/GQAbABkAGQAbABcAAAAAAAAAgD8AAIA/KVyPvxMACtcjPQsAAQAAAAAAAAABAAAAAAAAAAAAAIA/AAAAAD4BGwAXAAAAAAAAAIA/AACAPylcj78TAI/CdbwLAAEAAAAAAAAAAQAAAAAAAAAAAACAPwAAAIA+ARsAFwAAAAAAAACAPwAAgD97FK6+FQBxPapAj8K1QDMzc0ATAI/CdTwLAAEAAAAAAAAAAQAAAAAAAAAAAACAPwAAACA/AJqZGT8BGwAZAA0ABAAAAAAAAEATAArXozwHAAAAAAA/AI/C9T0AzczMPgDNzMw+");
 
-		int index = 0;
-		
-		float input_start = o.min;
-		float input_end = o.max;
-		float output_start = 0.0;
-		float output_end = 1.0;
+			std::vector<float> noiseOutput(width * height * depth);
+			FastNoise::OutputMinMax o = gen->GenUniformGrid3D(noiseOutput.data(), 0, 0, 0, width, height, depth, 1.0f, 1337);
+			//FastNoise::OutputMinMax bounds = gen->GenUniformGrid2D(noiseOutput.data(), 0, 0, width, height, 0.02f, 1337);
 
-		uint8_t* data = new uint8_t[width * height * depth * 4];
-		for (int i = 0; i < width * height * depth; i++)
-		{	
-			float input = noiseOutput[i];
-			float output = output_start + ((output_end - output_start) / (input_end - input_start)) * (input - input_start);
-			data[i * 4 + 0] = output * 255;
-			data[i * 4 + 1] = output * 255;
-			data[i * 4 + 2] = output * 255;
-			data[i * 4 + 3] = 255;
+			int index = 0;
+
+			float input_start = o.min;
+			float input_end = o.max;
+			float output_start = 0.0;
+			float output_end = 1.0;
+
+			for (int i = 0; i < width * height * depth; i++)
+			{
+				float input = noiseOutput[i];
+				float output = output_start + ((output_end - output_start) / (input_end - input_start)) * (input - input_start);
+				data[i * 4 + 0] = output * 255;
+				data[i * 4 + 1] = output * 255;
+				data[i * 4 + 2] = output * 255;
+				data[i * 4 + 3] = 255;
+			}
+
+
+			std::ofstream stream(filepath, std::ios::binary);
+			stream.write((const char*)data, noiseSize);
+			stream.close();
 		}
 
 		ImageSpecification spec;

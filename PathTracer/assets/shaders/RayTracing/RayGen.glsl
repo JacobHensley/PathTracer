@@ -143,7 +143,9 @@ vec3 TracePath(Ray ray, inout uint seed)
 			// radiance += DirectLight(r, payload, true) * throughput;
 
 			// Sample BSDF for color and outgoing direction
-			scatterSample.f = DisneySample(payload, -ray.Direction, payload.WorldNormal, scatterSample.L, scatterSample.pdf, seed);
+
+			vec3 ffNormal = dot(-ray.Direction, payload.WorldNormal) < 0.0 ? -payload.WorldNormal : payload.WorldNormal;
+			scatterSample.f = DisneySample(payload, -ray.Direction, ffNormal, scatterSample.L, scatterSample.pdf, seed);
 			if (scatterSample.pdf > 0.0)
 				throughput *= scatterSample.f / scatterSample.pdf;
 			else
@@ -339,7 +341,7 @@ void main()
 		ray.TMin = 0.00001;
 		ray.TMax = 1e27f;
 
-		color += TraceCloudPath(ray, seed);
+		color += TracePath(ray, seed);
 	}
 
 	float numPaths = SAMPLE_COUNT;
