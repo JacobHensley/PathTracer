@@ -7,6 +7,7 @@
 #include <FastNoise/FastNoise.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <cmath>
 
 RayTracingLayer::RayTracingLayer(const std::string& name)
@@ -16,11 +17,12 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 
 	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Suzanne/glTF/Suzanne.gltf"));
 	//m_Mesh = CreateRef<Mesh>(CreateRef<MeshSource>("assets/models/Sponza/glTF/Sponza.gltf"));
-	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/CornellBox.gltf"));
-	//m_Mesh = CreateRef<Mesh>(MeshSource("assets/models/Cube.gltf"));
 	m_Mesh = CreateRef<Mesh>(CreateRef<MeshSource>("assets/models/IntelSponza/NewSponza_Main_glTF_002.gltf"));
-	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+	//m_Mesh = CreateRef<Mesh>(CreateRef<MeshSource>("assets/models/Rotation.gltf"));
+	//m_Mesh = CreateRef<Mesh>(CreateRef<MeshSource>("assets/models/Cube.gltf"));
+	//m_Mesh = CreateRef<Mesh>(CreateRef<MeshSource>("assets/models/CornellBox.gltf"));
 	//m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+	m_Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
 
 	m_RenderCommandBuffer = CreateRef<RenderCommandBuffer>(1);
 
@@ -82,12 +84,7 @@ RayTracingLayer::RayTracingLayer(const std::string& name)
 		m_PostProcessingComputeDescriptorSet = pipelineSpec.Shader->AllocateDescriptorSet(m_DescriptorPool, 0);
 	}
 
-	{
-		AccelerationStructureSpecification spec;
-		spec.Mesh = m_Mesh;
-		spec.Transform = m_Transform;
-		m_AccelerationStructure = CreateRef<AccelerationStructure>(spec);
-	}
+	CreateAccelerationStructure();
 
 	{
 		ImageSpecification spec;
@@ -330,6 +327,14 @@ bool RayTracingLayer::CreateRayTracingPipeline()
 	return true;
 }
 
+void RayTracingLayer::CreateAccelerationStructure()
+{
+	AccelerationStructureSpecification spec;
+	spec.Mesh = m_Mesh;
+	spec.Transform = m_Transform;
+	m_AccelerationStructure = CreateRef<AccelerationStructure>(spec);
+}
+
 void RayTracingLayer::OnUpdate()
 {
 	Ref<VulkanDevice> device = Application::GetApp().GetVulkanDevice();
@@ -407,6 +412,85 @@ void RayTracingLayer::OnRender()
 	m_RenderCommandBuffer->Submit();
 }
 
+glm::vec3 Scale(const glm::vec3& v, float desiredLength)
+{
+	return v * desiredLength / length(v);
+}
+
+bool DecomposeTransform(const glm::mat4& transform, glm::vec3& translation, glm::quat& rotation, glm::vec3& scale)
+{
+	using namespace glm;
+	using T = float;
+
+	mat4 LocalMatrix(transform);
+
+	if (epsilonEqual(LocalMatrix[3][3], static_cast<T>(0), epsilon<T>()))
+		return false;
+
+	// Assume matrix is already normalized
+	//ASSERT(epsilonEqual(LocalMatrix[3][3], static_cast<T>(1), static_cast<T>(0.00001)));
+
+	// Ignore perspective
+//ASSERT(
+//	epsilonEqual(LocalMatrix[0][3], static_cast<T>(0), epsilon<T>()) &&
+//	epsilonEqual(LocalMatrix[1][3], static_cast<T>(0), epsilon<T>()) &&
+//	epsilonEqual(LocalMatrix[2][3], static_cast<T>(0), epsilon<T>())
+//);
+//
+
+	// Next take care of translation (easy).
+	translation = vec3(LocalMatrix[3]);
+	LocalMatrix[3] = vec4(0, 0, 0, LocalMatrix[3].w);
+
+	vec3 Row[3];
+
+	// Now get scale and shear.
+	for (length_t i = 0; i < 3; ++i)
+		for (length_t j = 0; j < 3; ++j)
+			Row[i][j] = LocalMatrix[i][j];
+
+	// Compute X scale factor and normalize first row.
+	scale.x = length(Row[0]);
+	Row[0] = Scale(Row[0], static_cast<T>(1));
+	scale.y = length(Row[1]);
+	Row[1] = Scale(Row[1], static_cast<T>(1));
+
+	scale.z = length(Row[2]);
+	Row[2] = Scale(Row[2], static_cast<T>(1));
+
+	// Rotation as quaternion
+	int i, j, k = 0;
+	T root, trace = Row[0].x + Row[1].y + Row[2].z;
+	if (trace > static_cast<T>(0))
+	{
+		root = sqrt(trace + static_cast<T>(1));
+		rotation.w = static_cast<T>(0.5) * root;
+		root = static_cast<T>(0.5) / root;
+		rotation.x = root * (Row[1].z - Row[2].y);
+		rotation.y = root * (Row[2].x - Row[0].z);
+		rotation.z = root * (Row[0].y - Row[1].x);
+	} // End if > 0
+	else
+	{
+		static int Next[3] = { 1, 2, 0 };
+		i = 0;
+		if (Row[1].y > Row[0].x) i = 1;
+		if (Row[2].z > Row[i][i]) i = 2;
+		j = Next[i];
+		k = Next[j];
+
+		root = sqrt(Row[i][i] - Row[j][j] - Row[k][k] + static_cast<T>(1.0));
+
+		rotation[i] = static_cast<T>(0.5) * root;
+		root = static_cast<T>(0.5) / root;
+		rotation[j] = root * (Row[i][j] + Row[j][i]);
+		rotation[k] = root * (Row[i][k] + Row[k][i]);
+		rotation.w = root * (Row[j][k] - Row[k][j]);
+	} // End if <= 0
+
+	return true;
+}
+
 static float factor = 1.0f;
 void RayTracingLayer::OnImGUIRender()
 {
@@ -432,6 +516,7 @@ void RayTracingLayer::OnImGUIRender()
 	{
 		ImGui::Separator();
 
+		ImGui::Text("%s", m_Mesh->GetSubMeshes()[m_SelectedSubMeshIndex].Name.c_str());
 		uint32_t materialIndex = m_Mesh->GetSubMeshes()[m_SelectedSubMeshIndex].MaterialIndex;
 		MaterialBuffer& materialBuffer = m_Mesh->GetMaterialBuffers()[materialIndex];
 		bool updated = false;
@@ -465,6 +550,48 @@ void RayTracingLayer::OnImGUIRender()
 			updated = true;
 		if (ImGui::DragFloat("ior", &materialBuffer.ior, 0.01f, 0.0f, 2.0f))
 			updated = true;
+
+		ImGui::Separator();
+
+		static bool recreateAS = false;
+		ImGui::Checkbox("Automatically update AS", &recreateAS);
+
+		if (ImGui::DragFloat3("Translation", &m_Mesh->GetSubMeshes()[m_SelectedSubMeshIndex].WorldTransform[3][0]))
+		{
+			if (recreateAS)
+				CreateAccelerationStructure();
+		}
+	
+		auto& submeshWorldTransform = m_Mesh->GetSubMeshes()[m_SelectedSubMeshIndex].WorldTransform;
+		glm::vec3 translation, scale;
+		glm::quat rotation;
+		DecomposeTransform(submeshWorldTransform, translation, rotation, scale);
+
+		bool reconstructMatrix = false;
+
+		glm::vec3 rotEuler = glm::degrees(glm::eulerAngles(rotation));
+		if (ImGui::DragFloat4("Rotation (quat)", glm::value_ptr(rotation)))
+			reconstructMatrix = true;
+
+		if (ImGui::DragFloat3("Rotation", glm::value_ptr(rotEuler)))
+		{
+			rotation = glm::quat(glm::radians(rotEuler));
+			reconstructMatrix = true;
+		}
+
+		if (ImGui::DragFloat3("Scale", glm::value_ptr(scale)))
+			reconstructMatrix = true;
+
+		if (reconstructMatrix)
+		{
+			submeshWorldTransform = glm::translate(glm::mat4(1.0f), translation)
+				* glm::toMat4(rotation) * glm::scale(glm::mat4(1.0f), scale);
+
+			if (recreateAS)
+				CreateAccelerationStructure();
+		}
+
+		ImGui::Separator();
 
 		const glm::mat4& matrix = m_Mesh->GetSubMeshes()[m_SelectedSubMeshIndex].WorldTransform;
 		glm::vec4 a = matrix[0];

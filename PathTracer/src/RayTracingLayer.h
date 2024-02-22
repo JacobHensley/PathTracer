@@ -51,6 +51,7 @@ class RayTracingLayer : public Layer
 		void RayTracingPass();
 		void PostProcessingPass();
 		bool CreateRayTracingPipeline();
+		void CreateAccelerationStructure();
 	private:
 		Ref<Mesh> m_Mesh;
 		glm::mat4 m_Transform;
